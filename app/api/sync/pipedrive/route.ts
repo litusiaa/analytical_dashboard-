@@ -109,7 +109,7 @@ export async function POST(req: Request) {
             entered_at: new Date(h.time),
             source: 'flow_api',
             snapshot_expected_close_date: h.expected_close_date ? new Date(h.expected_close_date) : null,
-            meta: null,
+            meta: undefined,
           },
         });
       }
