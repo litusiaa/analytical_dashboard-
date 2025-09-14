@@ -1,6 +1,6 @@
 {
   "crons": [
-    { "path": "/api/sync/pipedrive?mode=inc&secret=__SYNC_SECRET__", "schedule": "*/30 * * * *" }
+    { "path": "/api/sync/pipedrive?mode=inc&secret=__SYNC_SECRET__", "schedule": "0 3 * * *" }
   ]
 }
 
