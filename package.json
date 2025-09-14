@@ -21,6 +21,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@types/react": "^18.3.3",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.41",
     "prisma": "^5.18.0",
