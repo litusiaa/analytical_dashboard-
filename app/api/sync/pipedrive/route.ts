@@ -10,7 +10,11 @@ function authorized(req: Request): boolean {
   const token = bearer?.startsWith('Bearer ')
     ? bearer.substring('Bearer '.length)
     : undefined;
-  const secret = url.searchParams.get('secret') || token;
+  let secret = url.searchParams.get('secret') || token;
+  // Allow Vercel Cron placeholder to resolve to ENV at runtime
+  if (secret === '__SYNC_SECRET__') {
+    secret = process.env.SYNC_SECRET;
+  }
   return Boolean(secret && process.env.SYNC_SECRET && secret === process.env.SYNC_SECRET);
 }
 
