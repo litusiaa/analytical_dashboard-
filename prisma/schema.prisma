@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model pd_users {
+  id         BigInt   @id
+  name       String?
+  email      String?
+  raw        Json?
+  updated_at DateTime @db.Timestamptz
+}
+
+model pd_pipelines {
+  id         BigInt   @id
+  name       String
+  raw        Json?
+  updated_at DateTime @db.Timestamptz
+}
+
+model pd_stages {
+  id          BigInt   @id
+  pipeline_id BigInt
+  name        String
+  order_no    Int?
+  raw         Json?
+  updated_at  DateTime @db.Timestamptz
+}
+
+model pd_deals {
+  id                  BigInt   @id
+  title               String
+  org_id              BigInt?
+  org_name            String?
+  owner_id            BigInt?
+  owner_name          String?
+  pipeline_id         BigInt?
+  stage_id            BigInt?
+  status              String
+  add_time            DateTime? @db.Timestamptz
+  update_time         DateTime? @db.Timestamptz
+  won_time            DateTime? @db.Timestamptz
+  expected_close_date DateTime? @db.Date
+  pd_link             String?
+  raw                 Json?
+  updated_at          DateTime  @db.Timestamptz
+}
+
+model pd_stage_events {
+  id          BigInt   @id @default(autoincrement())
+  deal_id     BigInt
+  pipeline_id BigInt?
+  stage_id    BigInt
+  entered_at  DateTime @db.Timestamptz
+  source      String   // flow_api | webhook | backfill
+  snapshot_expected_close_date DateTime? @db.Date
+  meta        Json?
+
+  @@index([deal_id, stage_id, entered_at])
+}
+
+model pm_metrics_cache {
+  id                        BigInt   @id @default(autoincrement())
+  owner_id                  BigInt
+  from_date                 DateTime @db.Date
+  to_date                   DateTime @db.Date
+  signed_count              Int
+  launched_count            Int
+  launch_pct                Decimal  @db.Decimal(5,2)
+  missed_deadline_count     Int
+  missed_deadline_pct       Decimal  @db.Decimal(5,2)
+  avg_integration_to_pilot  Decimal? @db.Decimal(6,2)
+  computed_at               DateTime @db.Timestamptz
+}
+
+model dashboard_layouts {
+  id             BigInt   @id @default(autoincrement())
+  dashboard_slug String   @unique
+  layout         Json
+  updated_at     DateTime @db.Timestamptz
+}
+
+model sync_logs {
+  id          BigInt   @id @default(autoincrement())
+  source      String
+  started_at  DateTime @db.Timestamptz
+  finished_at DateTime @db.Timestamptz
+  status      String   // ok | error
+  info        Json?
+}
+
