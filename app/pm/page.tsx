@@ -3,10 +3,14 @@ import { ChartLine } from '@/components/ChartLine';
 import { TableOverdue } from '@/components/TableOverdue';
 import { Card } from '@/components/Card';
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(path, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed');
-  return res.json();
+async function safeGet<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (!res.ok) return fallback;
+    return (await res.json()) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 function fmtPct(n: number) {
@@ -23,9 +27,17 @@ export default async function PMPage() {
   const to = new Date().toISOString().slice(0, 10);
 
   const [metrics, overdue, lastSync] = await Promise.all([
-    fetchJson<any>(`/api/pm/metrics?from=${from}&to=${to}&ownerName=${encodeURIComponent(ownerName)}`),
-    fetchJson<any>(`/api/pm/overdue?from=${from}&to=${to}&ownerName=${encodeURIComponent(ownerName)}`),
-    fetchJson<any>(`/api/health`),
+    safeGet<any>(`/api/pm/metrics?from=${from}&to=${to}&ownerName=${encodeURIComponent(ownerName)}`, {
+      launchPct: 0,
+      signedCount: 0,
+      launchedCount: 0,
+      missedPct: 0,
+      missedCount: 0,
+      avgIntegrationToPilotDays: 0,
+      trend: [],
+    }),
+    safeGet<any>(`/api/pm/overdue?from=${from}&to=${to}&ownerName=${encodeURIComponent(ownerName)}`, { rows: [] }),
+    safeGet<any>(`/api/health`, { nowUtc: new Date().toISOString() }),
   ]);
 
   return (

@@ -1,15 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(path, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed');
-  return res.json();
+async function safeGet<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (!res.ok) return fallback;
+    return (await res.json()) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 export default async function DashboardSlugPage({ params }: { params: { slug: string } }) {
   const slug = params.slug;
-  const links = await fetchJson<{ items: any[] }>(`/api/dashboards/${slug}/data-sources`);
-  const widgets = await fetchJson<{ items: any[] }>(`/api/dashboards/${slug}/widgets`);
+  const links = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/data-sources`, { items: [] });
+  const widgets = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/widgets`, { items: [] });
 
   return (
     <main className="max-w-7xl mx-auto p-6 space-y-6">
