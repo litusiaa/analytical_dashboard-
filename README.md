@@ -19,6 +19,9 @@ Next.js 14 (App Router, TypeScript, RSC) BI dashboard. This MVP implements the P
 - Manual sync: `POST /api/sync/pipedrive?mode=full` with `Authorization: Bearer <SYNC_SECRET>` (or `?secret=...` fallback)
 - Cron: configured in `vercel.json` to run every 30 minutes hitting `mode=inc`.
 
+## Data Sources (Google Sheets)
+- Pages: `/sources`, `/dashboards/[slug]`
+
 ## GitHub Actions
 Workflow `.github/workflows/db-migrate.yml` runs Prisma generate and `db push` on schema changes.
 
