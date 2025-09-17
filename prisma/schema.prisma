@@ -93,3 +93,49 @@ model sync_logs {
   info        Json?
 }
 
+// ==== Data Sources & Widgets ====
+
+model DataSource {
+  id            BigInt   @id @default(autoincrement())
+  type          String
+  name          String
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // google sheets specific
+  spreadsheetId String?
+  defaultRange  String?
+
+  // relations
+  links         DashboardDataSourceLink[]
+  widgets       Widget[]
+}
+
+model DashboardDataSourceLink {
+  id           BigInt   @id @default(autoincrement())
+  dashboard    String
+  dataSourceId BigInt
+  createdAt    DateTime @default(now())
+
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id])
+
+  @@index([dashboard])
+}
+
+model Widget {
+  id           BigInt   @id @default(autoincrement())
+  dashboard    String
+  type         String
+  title        String
+  dataSourceId BigInt?
+  config       Json?
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dataSource   DataSource? @relation(fields: [dataSourceId], references: [id])
+
+  @@index([dashboard])
+}
+
