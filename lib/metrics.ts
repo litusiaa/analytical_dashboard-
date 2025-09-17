@@ -30,21 +30,31 @@ export async function recomputePmMetricsCache(from: string, to: string, ownerId:
   const signedCount = signedIds.length;
 
   // Launched: subset where current stage = Active
-  const launchedCount = signedCount
-    ? (await prisma.pd_deals.count({ where: { id: { in: signedIds }, stage_id: { in: (await stageIdsByName([KEY_STAGES.ACTIVE])) } } }))
-    : 0;
+  let launchedCount = 0;
+  if (signedCount) {
+    const activeIds = await stageIdsByName([KEY_STAGES.ACTIVE]);
+    if (activeIds.length > 0) {
+      launchedCount = await prisma.pd_deals.count({ where: { id: { in: signedIds }, stage_id: { in: activeIds } } });
+    } else {
+      launchedCount = 0; // нет известного id стадии Active → считаем 0
+    }
+  }
 
   // Missed deadline: expected_close_date passed but not Active yet
-  const missedCount = await prisma.pd_deals.count({
-    where: {
+  let missedCount = 0;
+  {
+    const activeIds = await stageIdsByName([KEY_STAGES.ACTIVE]);
+    const baseWhere: any = {
       id: { in: signedIds },
       expected_close_date: { lt: new Date() },
-      OR: [
-        { stage_id: { notIn: await stageIdsByName([KEY_STAGES.ACTIVE]) } },
-        { stage_id: null },
-      ],
-    },
-  });
+    };
+    if (activeIds.length > 0) {
+      baseWhere.OR = [{ stage_id: { notIn: activeIds } }, { stage_id: null }];
+    } else {
+      baseWhere.OR = [{ stage_id: null }, {}]; // без фильтра по active
+    }
+    missedCount = await prisma.pd_deals.count({ where: baseWhere });
+  }
 
   // Avg Integration → Pilot
   const avgIntegrationToPilot = await averageDaysBetweenStages(KEY_STAGES.INTEGRATION, KEY_STAGES.PILOT, signedIds);

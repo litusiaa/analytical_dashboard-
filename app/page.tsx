@@ -13,11 +13,36 @@ export default function HomePage() {
             <Link href="/pm" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
           </CardContent>
         </Card>
-        <Card><CardTitle>DS (скоро)</CardTitle></Card>
-        <Card><CardTitle>CSM (скоро)</CardTitle></Card>
-        <Card><CardTitle>Finance (скоро)</CardTitle></Card>
-        <Card><CardTitle>Partner (скоро)</CardTitle></Card>
-        <Card><CardTitle>Sales (скоро)</CardTitle></Card>
+        <Card>
+          <CardTitle>DS</CardTitle>
+          <CardContent className="mt-2">
+            <Link href="/dashboards/ds" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardTitle>CSM</CardTitle>
+          <CardContent className="mt-2">
+            <Link href="/dashboards/csm" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardTitle>Finance</CardTitle>
+          <CardContent className="mt-2">
+            <Link href="/dashboards/finance" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardTitle>Partner</CardTitle>
+          <CardContent className="mt-2">
+            <Link href="/dashboards/partner" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardTitle>Sales</CardTitle>
+          <CardContent className="mt-2">
+            <Link href="/dashboards/sales" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Перейти</Link>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
