@@ -76,7 +76,7 @@ function normalizeSheetInput(s: { title?: string; range?: string }): { title: st
   // 3) range = "Sheet!A1:Z" and title provided → prefer explicit title, strip prefix if matches
   let title = rawTitle || '';
   let range = rawRange || undefined;
-  const m = rawRange.match(/^([^!]+)!([A-Za-z]+\d+:[A-Za-z]+\d+)$/);
+  const m = rawRange.match(/^([^!]+)!([A-Za-z]+\d*:[A-Za-z]+\d*)$/);
   if (!title && m) {
     title = m[1];
     range = m[2];
@@ -84,7 +84,7 @@ function normalizeSheetInput(s: { title?: string; range?: string }): { title: st
     range = m[2];
   }
   // Validate range if present
-  if (range && !/^([A-Za-z]+\d+:[A-Za-z]+\d+)$/.test(range)) {
+  if (range && !/^([A-Za-z]+\d*:[A-Za-z]+\d*)$/.test(range)) {
     throw Object.assign(new Error('Invalid range. Use A1:Z or <Sheet>!A1:Z'), { statusCode: 422 });
   }
   if (!title) {

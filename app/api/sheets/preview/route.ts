@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     let sheetTitle = url.searchParams.get('sheet') || '';
     let range = url.searchParams.get('range') || 'A1:Z';
     // Normalize: allow range as "A1:Z" or "Title!A1:Z"
-    const m = range.match(/^([^!]+)!([A-Za-z]+\d+:[A-Za-z]+\d+)$/);
+    const m = range.match(/^([^!]+)!([A-Za-z]+\d*:[A-Za-z]+\d*)$/);
     if (m) {
       if (!sheetTitle) sheetTitle = m[1];
       range = m[2];
