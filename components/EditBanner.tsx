@@ -31,12 +31,13 @@ export function EditBanner() {
 
   return (
     <div className="bg-yellow-100 text-yellow-900 text-sm px-4 py-2 flex items-center justify-between">
-      <div><strong>EDIT MODE — active</strong> (expires in {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')})</div>
+      <div><strong>Режим редактирования — изменения сохраняются как черновик</strong> (осталось {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')})</div>
       <div className="flex gap-2">
-        <button className="underline" onClick={() => location.reload()}>Save draft</button>
-        <button className="underline" onClick={() => alert('Publish: будет реализовано в следующей итерации')}>Publish</button>
+        <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/draft', { method: 'POST', credentials: 'include' }); location.reload(); }}>Сохранить как черновик</button>
+        <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/publish', { method: 'POST', credentials: 'include' }); location.reload(); }}>Опубликовать</button>
+        <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/discard', { method: 'POST', credentials: 'include' }); location.reload(); }}>Отменить изменения</button>
         <button className="underline" onClick={extend}>Продлить</button>
-        <button className="underline" onClick={exit}>Exit edit mode</button>
+        <button className="underline" onClick={exit}>Выйти</button>
       </div>
     </div>
   );

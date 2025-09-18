@@ -99,6 +99,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        credentials: 'include',
       });
       if (!res2.ok) throw new Error((await res2.json().catch(() => ({}))).message || 'Не удалось сохранить источник');
       await refresh();
@@ -117,8 +118,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     try {
       const res = await fetch(`/api/dashboards/${slug}/widgets`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret2}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: wType, title: wTitle, dataSourceId: wDataSourceId, config: { range: wRange } }),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Не удалось создать виджет');
       await refresh();

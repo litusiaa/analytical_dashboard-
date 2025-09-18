@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isAuthorizedEdit, unauthorizedJson } from '@/lib/authz';
 
 function authorized(req: Request): boolean {
   const bearer = req.headers.get('authorization');
@@ -9,7 +10,7 @@ function authorized(req: Request): boolean {
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  if (!authorized(req)) return NextResponse.json({ message: 'Invalid or missing SYNC_SECRET' }, { status: 401 });
+  if (!(await isAuthorizedEdit(req))) return NextResponse.json(unauthorizedJson(), { status: 401 });
   const body = await req.json().catch(() => ({}));
   const config = body?.config ?? null;
   const title = body?.title as string | undefined;
@@ -18,7 +19,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  if (!authorized(req)) return NextResponse.json({ message: 'Invalid or missing SYNC_SECRET' }, { status: 401 });
+  if (!(await isAuthorizedEdit(req))) return NextResponse.json(unauthorizedJson(), { status: 401 });
   await prisma.widget.delete({ where: { id: BigInt(params.id) } });
   return NextResponse.json({ ok: true });
 }

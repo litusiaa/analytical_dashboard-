@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isAuthorizedEdit, unauthorizedJson } from '@/lib/authz';
 
 const SLUGS = new Set(['pm','ds','csm','finance','partner','sales']);
 
@@ -18,13 +19,13 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {
-  if (!authorized(req)) return NextResponse.json({ message: 'Invalid or missing SYNC_SECRET' }, { status: 401 });
+  if (!(await isAuthorizedEdit(req))) return NextResponse.json(unauthorizedJson(), { status: 401 });
   const slug = params.slug;
   if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
   const body = await req.json().catch(() => ({}));
   const { type, title, dataSourceId, config } = body || {};
   if (!type || !title) return NextResponse.json({ message: 'type and title are required' }, { status: 400 });
-  const item = await prisma.widget.create({ data: { dashboard: slug, type, title, dataSourceId: dataSourceId ? BigInt(dataSourceId) : null, config: config ?? null } });
+  const item = await prisma.widget.create({ data: { dashboard: slug, type, title, dataSourceId: dataSourceId ? BigInt(dataSourceId) : null, config: config ?? null, status: 'draft' } });
   return NextResponse.json({ id: item.id });
 }
 
