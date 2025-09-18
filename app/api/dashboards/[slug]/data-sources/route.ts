@@ -72,8 +72,14 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
           ds = { id: row.id, name: row.name };
         }
         if (sheets?.length) {
-          const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null }));
-          await tx.dataSourceSheet.createMany({ data: normalized });
+          const t: any[] = (await tx.$queryRawUnsafe(
+            "SELECT 1 AS ok FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'DataSourceSheet' LIMIT 1"
+          )) as any[];
+          const hasSheetsTable = Array.isArray(t) && t.length > 0;
+          if (hasSheetsTable) {
+            const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null }));
+            await tx.dataSourceSheet.createMany({ data: normalized });
+          }
         }
         const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: ds.id } });
         return { ds, link };

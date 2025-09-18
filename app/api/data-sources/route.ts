@@ -14,7 +14,14 @@ export async function GET(req: Request) {
     const cookie = req.headers.get('cookie') || '';
     const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
     const where: any = canEdit ? {} : { status: 'published' };
-    const list = await prisma.dataSource.findMany({ where, orderBy: { createdAt: 'desc' }, include: { sheets: true } });
+    // If legacy DB without DataSourceSheet, avoid include to prevent P2021
+    let includeSheets = true;
+    try {
+      await prisma.dataSourceSheet.count({ where: { id: { gt: BigInt(0) } } });
+    } catch {
+      includeSheets = false;
+    }
+    const list = await prisma.dataSource.findMany({ where, orderBy: { createdAt: 'desc' }, include: includeSheets ? { sheets: true } : undefined as any });
     const { serializeJsonSafe } = await import('@/lib/json');
     return NextResponse.json({ items: serializeJsonSafe(list) });
   } catch (e: any) {
