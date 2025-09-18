@@ -44,23 +44,24 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       if (!spreadsheetId) return NextResponse.json({ message: 'Invalid Google Sheets URL' }, { status: 400 });
 
       const result = await prisma.$transaction(async (tx) => {
+        // Detect if legacy DB without `status` column
+        const col: any[] = (await tx.$queryRawUnsafe(
+          "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'DataSource' AND column_name = 'status' LIMIT 1"
+        )) as any[];
+        const hasStatus = Array.isArray(col) && col.length > 0;
+
         let ds: any;
-        try {
+        if (hasStatus) {
           ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId, status: 'draft' } });
-        } catch (err: any) {
-          const msg = String(err?.message || err);
-          if (msg.includes('column') && msg.includes('status')) {
-            const rows: Array<{ id: bigint; name: string }>[] = await tx.$queryRawUnsafe(
-              'INSERT INTO "DataSource" ("type","name","spreadsheetId") VALUES ($1,$2,$3) RETURNING "id","name"',
-              'google_sheets',
-              name || 'Google Sheet',
-              spreadsheetId,
-            ) as any;
-            const row = Array.isArray(rows) ? (rows[0] as any) : rows;
-            ds = { id: row.id, name: row.name };
-          } else {
-            throw err;
-          }
+        } else {
+          const rows: any[] = (await tx.$queryRawUnsafe(
+            'INSERT INTO "DataSource" ("type","name","spreadsheetId") VALUES ($1,$2,$3) RETURNING "id","name"',
+            'google_sheets',
+            name || 'Google Sheet',
+            spreadsheetId,
+          )) as any[];
+          const row = rows?.[0] ?? rows;
+          ds = { id: row.id, name: row.name };
         }
         if (sheets?.length) {
           const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null }));
