@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import React from 'react';
+import { DashboardManager } from '@/components/DashboardManager';
 
 async function safeGet<T>(path: string, fallback: T): Promise<T> {
   try {
@@ -24,7 +25,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
     <main>
       <NavBar title={slug.toUpperCase()} />
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Дашборд: {slug.toUpperCase()}</h1>
+      <h1 className="text-2xl font-semibold">Dashboard: {slug.toUpperCase()}</h1>
 
       <Card>
         <CardHeader>Источники этого дашборда</CardHeader>
@@ -34,7 +35,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
               <li key={l.id}>{l.dataSource?.name} ({l.dataSource?.type})</li>
             ))}
           </ul>
-          <div className="text-sm text-gray-500 mt-2">Привязка через POST /api/dashboards/{slug}/data-sources (MVP)</div>
+          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} /></div>
         </CardContent>
       </Card>
 
