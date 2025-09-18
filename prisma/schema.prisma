@@ -110,6 +110,7 @@ model DataSource {
   // relations
   links         DashboardDataSourceLink[]
   widgets       Widget[]
+  sheets        DataSourceSheet[]
 }
 
 model DashboardDataSourceLink {
@@ -137,5 +138,17 @@ model Widget {
   dataSource   DataSource? @relation(fields: [dataSourceId], references: [id])
 
   @@index([dashboard])
+}
+
+model DataSourceSheet {
+  id           BigInt   @id @default(autoincrement())
+  dataSourceId BigInt
+  title        String
+  range        String?
+  createdAt    DateTime @default(now())
+
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id])
+
+  @@index([dataSourceId])
 }
 

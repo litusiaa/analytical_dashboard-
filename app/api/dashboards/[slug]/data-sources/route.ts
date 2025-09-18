@@ -22,9 +22,29 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   const slug = params.slug;
   if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
   const body = await req.json().catch(() => ({}));
-  const dataSourceId = body?.dataSourceId as number | undefined;
-  if (!dataSourceId) return NextResponse.json({ message: 'dataSourceId is required' }, { status: 400 });
-  const link = await prisma.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: BigInt(dataSourceId) } });
-  return NextResponse.json({ id: link.id });
+
+  // Two modes: attach existing source OR create from URL with sheets list
+  if (body?.dataSourceId) {
+    const dataSourceId = Number(body.dataSourceId);
+    const link = await prisma.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: BigInt(dataSourceId) } });
+    return NextResponse.json({ id: link.id });
+  }
+
+  if (body?.spreadsheetUrl) {
+    // create datasource + optional sheets
+    const { name, spreadsheetUrl, sheets } = body as { name?: string; spreadsheetUrl: string; sheets?: Array<{ title: string; range?: string }> };
+    const { parseSpreadsheetIdFromUrl } = await import('@/lib/googleSheets');
+    const spreadsheetId = parseSpreadsheetIdFromUrl(spreadsheetUrl);
+    if (!spreadsheetId) return NextResponse.json({ message: 'Invalid Google Sheets URL' }, { status: 400 });
+
+    const ds = await prisma.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId } });
+    if (sheets?.length) {
+      await prisma.dataSourceSheet.createMany({ data: sheets.map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null })) });
+    }
+    const link = await prisma.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: ds.id } });
+    return NextResponse.json({ id: link.id, dataSourceId: ds.id });
+  }
+
+  return NextResponse.json({ message: 'Provide dataSourceId or spreadsheetUrl' }, { status: 400 });
 }
 
