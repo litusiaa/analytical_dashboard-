@@ -149,8 +149,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
       <Modal open={canEdit && openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник (Google Sheets)">
         <div className="space-y-3">
-          {/* success toast */}
-          <SaveSuccess />
+          {/* success toast placeholder (removed undefined component) */}
           <label className="block text-sm">Name
             <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="DS Main Sheet" />
           </label>
