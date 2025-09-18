@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { KPI } from '@/components/KPI';
 import { ChartLine } from '@/components/ChartLine';
 import { TableOverdue } from '@/components/TableOverdue';

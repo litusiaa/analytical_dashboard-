@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { NavBar } from '@/components/NavBar';
 import { Modal } from '@/components/Modal';
