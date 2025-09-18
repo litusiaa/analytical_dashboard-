@@ -22,6 +22,8 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
   const links = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/data-sources`, { items: [] });
   const widgets = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/widgets`, { items: [] });
 
+  const serviceEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || 'bi-sheets-reader@grounded-will-439512-k9.iam.gserviceaccount.com';
+
   return (
     <main>
       {/* Banner will be shown when cookie present; for MVP always show bar when cookie exists on client */}
@@ -43,7 +45,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
               ))}
             </ul>
           )}
-          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} /></div>
+          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} serviceEmail={serviceEmail} /></div>
         </CardContent>
       </Card>
 

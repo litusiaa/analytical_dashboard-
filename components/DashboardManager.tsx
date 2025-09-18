@@ -21,7 +21,7 @@ async function safeGet<T>(url: string, fallback: T): Promise<T> {
 
 type SheetMeta = { title: string; rangeGuess: string };
 
-export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[] }) {
+export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
   const [allSources, setAllSources] = useState<DataSource[]>([]);
@@ -38,13 +38,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
   const [loading1, setLoading1] = useState(false);
   const [err1, setErr1] = useState<string | null>(null);
 
+  const [checking, setChecking] = useState<'idle'|'loading'|'ok'|'noaccess'|'invalid'|'nodata'>('idle');
+
   async function fetchMetadata(url: string) {
     setErr1(null);
     if (!url) return;
+    setChecking('loading');
     const res = await fetch(`/api/sheets/metadata?url=${encodeURIComponent(url)}`);
     if (!res.ok) {
       const msg = (await res.json().catch(() => ({}))).message || 'Не удалось получить метаданные';
-      setErr1(msg.includes('403') ? 'Выдайте доступ редактора сервисному аккаунту и повторите' : (msg.includes('Invalid') ? 'Неверная ссылка Google Sheets' : msg));
+      if (msg.includes('403')) { setErr1('Выдайте доступ редактора сервисному аккаунту и повторите'); setChecking('noaccess'); }
+      else if (msg.includes('Invalid')) { setErr1('Неверная ссылка Google Sheets'); setChecking('invalid'); }
+      else { setErr1(msg); setChecking('idle'); }
       setSheets([]); setSelected({}); return;
     }
     const data = await res.json();
@@ -53,6 +58,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
     const initial: Record<string, string> = {};
     (data.sheets || []).forEach((s: SheetMeta) => { initial[s.title] = s.rangeGuess || 'A1:Z'; });
     setSelected(initial);
+    setChecking((data.sheets || []).length ? 'ok' : 'nodata');
   }
 
   // Add Widget form
@@ -138,8 +144,13 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
             <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="DS Main Sheet" />
           </label>
           <label className="block text-sm">Spreadsheet URL
-            <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} onBlur={(e) => fetchMetadata(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+            <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') fetchMetadata(srcUrl); }} onBlur={(e) => fetchMetadata(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
           </label>
+          {checking === 'loading' ? <div className="text-xs text-gray-600 flex items-center gap-2"><Spinner /> Проверяем доступ…</div> : null}
+          {checking === 'ok' ? <div className="text-xs text-green-700">Доступ есть, найдено {sheets.length} листов</div> : null}
+          {checking === 'noaccess' ? <div className="text-xs text-red-700">Нет доступа</div> : null}
+          {checking === 'invalid' ? <div className="text-xs text-red-700">Неверная ссылка Google Sheets</div> : null}
+          {checking === 'nodata' ? <div className="text-xs text-yellow-700">Листы не найдены. Проверьте доступ и содержимое файла.</div> : null}
           {sheets.length > 0 ? (
             <div className="border rounded p-2">
               <div className="flex items-center justify-between mb-2">
@@ -175,7 +186,25 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
               </div>
             </div>
           ) : null}
-          {err1 ? <div className="text-sm text-red-600">{err1}</div> : null}
+          {err1 ? (
+            <div className="text-sm text-red-600">
+              {err1}
+              {checking === 'noaccess' ? (
+                <div className="mt-2 text-xs">
+                  Нет доступа к таблице. Добавьте сервисный аккаунт как «Редактор» и попробуйте снова.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="border rounded p-2 text-xs text-gray-600">
+            <div className="font-medium text-gray-500 mb-1">Доступ сервисному аккаунту</div>
+            <div>Чтобы приложение могло читать таблицу, добавьте этого пользователя в Google Sheets с правами «Редактор»:</div>
+            <div className="mt-2 flex items-center gap-2">
+              <Input readOnly value={serviceEmail} className="flex-1" />
+              <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(serviceEmail); alert('Скопировано'); }}>Скопировать</Button>
+              <button className="text-blue-600 underline" onClick={() => alert('1) В таблице нажмите «Поделиться»\n2) Вставьте адрес сервисного аккаунта\n3) Выберите «Редактор» → «Готово»')}>Как дать доступ?</button>
+            </div>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddSource(false)}>Отмена</Button>
             <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохранение…</span></>) : 'Сохранить'}</Button>
