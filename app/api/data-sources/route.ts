@@ -9,13 +9,24 @@ function authorized(req: Request): boolean {
   return Boolean(secret && process.env.SYNC_SECRET && secret === process.env.SYNC_SECRET);
 }
 
-export async function GET() {
-  const list = await prisma.dataSource.findMany({ orderBy: { createdAt: 'desc' } });
-  return NextResponse.json({ items: list });
+export async function GET(req: Request) {
+  try {
+    const cookie = req.headers.get('cookie') || '';
+    const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
+    const where: any = canEdit ? {} : { status: 'published' };
+    const list = await prisma.dataSource.findMany({ where, orderBy: { createdAt: 'desc' }, include: { sheets: true } });
+    const { serializeJsonSafe } = await import('@/lib/json');
+    return NextResponse.json({ items: serializeJsonSafe(list) });
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    const details = e?.code ? { code: e.code } : undefined;
+    return NextResponse.json({ error: msg, details }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return NextResponse.json({ message: 'Invalid or missing SYNC_SECRET' }, { status: 401 });
+  // legacy admin-only endpoint; UI doesn't use it now
+  if (!authorized(req)) return NextResponse.json({ error: 'Editing is disabled. Enable Edit dashboard.' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const type = body?.type as string;
   const name = body?.name as string;

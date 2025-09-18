@@ -21,7 +21,7 @@ async function safeGet<T>(url: string, fallback: T): Promise<T> {
 
 type SheetMeta = { title: string; rangeGuess: string };
 
-export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string }) {
+export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail, canEdit }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string; canEdit: boolean }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
   const [allSources, setAllSources] = useState<DataSource[]>([]);
@@ -101,7 +101,12 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         body: JSON.stringify(payload),
         credentials: 'include',
       });
-      if (!res2.ok) throw new Error((await res2.json().catch(() => ({}))).message || 'Не удалось сохранить источник');
+      if (!res2.ok) {
+        const txt = await res2.text();
+        let err = 'Не удалось сохранить источник';
+        try { const j = JSON.parse(txt); if (j?.error) err = j.error; else if (j?.message) err = j.message; } catch {}
+        throw new Error(err);
+      }
       await refresh();
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
@@ -133,15 +138,19 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     }
   }
 
+  // server provides canEdit prop; do not rely on document here
+
   return (
     <>
       <div className="flex gap-2">
-        <Button onClick={() => setOpenAddSource(true)}>Добавить источник</Button>
-        <Button variant="secondary" onClick={() => setOpenAddWidget(true)}>Добавить виджет</Button>
+        <Button onClick={() => (canEdit ? setOpenAddSource(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить источник</Button>
+        <Button variant="secondary" onClick={() => (canEdit ? setOpenAddWidget(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить виджет</Button>
       </div>
 
-      <Modal open={openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник (Google Sheets)">
+      <Modal open={canEdit && openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник (Google Sheets)">
         <div className="space-y-3">
+          {/* success toast */}
+          <SaveSuccess />
           <label className="block text-sm">Name
             <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="DS Main Sheet" />
           </label>
@@ -238,13 +247,11 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Диапазон (Range)
             <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="Лист1!A1:D100" />
           </label>
-          <label className="block text-sm">Admin Secret
-            <Input type="password" value={secret2} onChange={(e) => setSecret2(e.target.value)} placeholder="Введите SYNC_SECRET" />
-          </label>
+          {/* Admin Secret removed for UI operations */}
           {err2 ? <div className="text-sm text-red-600">{err2}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddWidget(false)}>Отмена</Button>
-            <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId || !secret2}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
+            <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
           </div>
         </div>
       </Modal>

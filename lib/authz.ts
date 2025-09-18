@@ -4,6 +4,6 @@ export async function isAuthorizedEdit(req: Request): Promise<boolean> {
 }
 
 export function unauthorizedJson() {
-  return { message: 'Editing is disabled. Click "Edit dashboard" to enable editing.' };
+  return { error: 'Editing is disabled. Enable Edit dashboard.' };
 }
 

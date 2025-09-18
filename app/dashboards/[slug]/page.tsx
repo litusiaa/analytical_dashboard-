@@ -7,6 +7,7 @@ import { Input } from '@/components/Input';
 import React from 'react';
 import { EditBanner } from '@/components/EditBanner';
 import { DashboardManager } from '@/components/DashboardManager';
+import { cookies } from 'next/headers';
 
 async function safeGet<T>(path: string, fallback: T): Promise<T> {
   try {
@@ -24,13 +25,12 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
   const widgets = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/widgets`, { items: [] });
 
   const serviceEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || 'bi-sheets-reader@grounded-will-439512-k9.iam.gserviceaccount.com';
+  const isEdit = cookies().get('edit_mode')?.value === '1';
 
   return (
     <main>
-      {/* Banner will be shown when cookie present; for MVP always show bar when cookie exists on client */}
-      {/* Client banner component handles countdown and actions */}
-      <EditBanner />
-      <NavBar title={slug.toUpperCase()} />
+      {isEdit ? <EditBanner /> : null}
+      <NavBar title={slug.toUpperCase()} initialActive={isEdit} />
       <div className="max-w-7xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard: {slug.toUpperCase()}</h1>
 
@@ -46,7 +46,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
               ))}
             </ul>
           )}
-          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} serviceEmail={serviceEmail} /></div>
+          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} serviceEmail={serviceEmail} canEdit={isEdit} /></div>
         </CardContent>
       </Card>
 
