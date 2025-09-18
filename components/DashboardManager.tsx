@@ -72,9 +72,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   async function refresh() {
     const [l, w, s] = await Promise.all([
-      safeGet<{ items: LinkItem[] }>(`/api/dashboards/${slug}/data-sources`, { items: [] }),
-      safeGet<{ items: WidgetItem[] }>(`/api/dashboards/${slug}/widgets`, { items: [] }),
-      safeGet<{ items: DataSource[] }>(`/api/data-sources`, { items: [] }),
+      safeGet<{ items: LinkItem[] }>(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { items: [] }),
+      safeGet<{ items: WidgetItem[] }>(`/api/dashboards/${slug}/widgets?ts=${Date.now()}`, { items: [] }),
+      safeGet<{ items: DataSource[] }>(`/api/data-sources?ts=${Date.now()}`, { items: [] }),
     ]);
     setLinks(l.items || []);
     setWidgets(w.items || []);
@@ -107,6 +107,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         try { const j = JSON.parse(txt); if (j?.error) err = j.error; else if (j?.message) err = j.message; } catch {}
         throw new Error(err);
       }
+      const created = await res2.json();
+      // Optimистично добавим линк в список без ожидания повторной загрузки
+      setLinks([{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets' } }, ...links]);
       await refresh();
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});

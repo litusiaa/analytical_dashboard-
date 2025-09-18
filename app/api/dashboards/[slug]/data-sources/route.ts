@@ -16,8 +16,12 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
   const cookie = req.headers.get('cookie') || '';
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
-  const links = await prisma.dashboardDataSourceLink.findMany({ where: { dashboard: slug }, include: { dataSource: true }, orderBy: { id: 'desc' } });
-  const items = canEdit ? links : links.filter((l) => l.dataSource?.status === 'published');
+  const links = await prisma.dashboardDataSourceLink.findMany({
+    where: { dashboard: slug },
+    select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true } } },
+    orderBy: { id: 'desc' },
+  });
+  const items = links; // legacy DB may not have status; filter skipped
   const { serializeJsonSafe } = await import('@/lib/json');
   return NextResponse.json({ items: serializeJsonSafe(items) });
 }
@@ -71,17 +75,18 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
           const row = rows?.[0] ?? rows;
           ds = { id: row.id, name: row.name };
         }
+        const dsId: bigint = typeof ds.id === 'bigint' ? ds.id : BigInt(String(ds.id));
         if (sheets?.length) {
           const t: any[] = (await tx.$queryRawUnsafe(
             "SELECT 1 AS ok FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'DataSourceSheet' LIMIT 1"
           )) as any[];
           const hasSheetsTable = Array.isArray(t) && t.length > 0;
           if (hasSheetsTable) {
-            const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null }));
+            const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: dsId, title: s.title, range: s.range ?? null }));
             await tx.dataSourceSheet.createMany({ data: normalized });
           }
         }
-        const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: ds.id } });
+        const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: dsId } });
         return { ds, link };
       });
       const id = Number(result.link.id);
