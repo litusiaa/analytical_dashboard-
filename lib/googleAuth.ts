@@ -2,16 +2,29 @@ import { google } from 'googleapis';
 
 function normalizePrivateKey(raw?: string): string {
   if (!raw) throw new Error('GOOGLE_SHEETS_PRIVATE_KEY is missing');
-  const trimmed = raw.trim();
-  const hasEscapedNewlines = trimmed.includes('\\n') && !trimmed.includes('\n');
-  const materialized = hasEscapedNewlines ? trimmed.replace(/\\n/g, '\n') : trimmed;
+  let v = raw.trim();
+  // strip wrapping quotes if user pasted with quotes
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1);
+  }
+  // materialize escaped newlines first
+  if (v.includes('\\n')) {
+    v = v.replace(/\\n/g, '\n');
+  }
+  // normalize CRLF to LF
+  v = v.replace(/\r\n/g, '\n');
   try {
-    if (!materialized.startsWith('-----BEGIN')) {
-      const decoded = Buffer.from(materialized, 'base64').toString('utf8');
-      if (decoded.startsWith('-----BEGIN')) return decoded.trim();
+    if (!v.startsWith('-----BEGIN')) {
+      const decoded = Buffer.from(v, 'base64').toString('utf8');
+      if (decoded.startsWith('-----BEGIN')) v = decoded;
     }
   } catch {}
-  return materialized;
+  v = v.trim();
+  // final guard: must contain header/footer
+  if (!v.includes('-----BEGIN') || !v.includes('-----END')) {
+    throw new Error('GOOGLE_SHEETS_PRIVATE_KEY has invalid format');
+  }
+  return v;
 }
 
 export function getSheetsAuth() {

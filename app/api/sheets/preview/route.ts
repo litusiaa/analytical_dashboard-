@@ -25,6 +25,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ rows });
   } catch (e: any) {
     const msg = String(e?.message || e);
+    if (msg.includes('invalid format') || msg.includes('DECODER')) {
+      return NextResponse.json({ message: 'Неверный формат приватного ключа. Проверьте GOOGLE_SHEETS_PRIVATE_KEY в ENV.' }, { status: 500 });
+    }
     if (msg.includes('403') || msg.includes('PERMISSION')) {
       return NextResponse.json({ message: `Нет доступа. Добавьте редактора: ${process.env.GOOGLE_SHEETS_CLIENT_EMAIL}` }, { status: 403 });
     }
