@@ -52,7 +52,9 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: ds.id } });
         return { ds, link };
       });
-      return NextResponse.json({ id: result.link.id, dataSourceId: result.ds.id, name: result.ds.name }, { status: 201 });
+      const id = Number(result.link.id);
+      const dataSourceId = Number(result.ds.id);
+      return NextResponse.json({ id, dataSourceId, name: result.ds.name }, { status: 201 });
     }
 
     return NextResponse.json({ message: 'Provide dataSourceId or spreadsheetUrl' }, { status: 400 });
