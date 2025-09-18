@@ -18,6 +18,8 @@ async function safeGet<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
+type SheetMeta = { title: string; rangeGuess: string };
+
 export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[] }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
@@ -30,10 +32,27 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
   // Add Source form
   const [srcName, setSrcName] = useState('');
   const [srcUrl, setSrcUrl] = useState('');
-  const [srcRange, setSrcRange] = useState('Лист1!A1:Z1000');
-  const [secret1, setSecret1] = useState('');
+  const [sheets, setSheets] = useState<SheetMeta[]>([]);
+  const [selected, setSelected] = useState<Record<string, string>>({}); // title -> range
   const [loading1, setLoading1] = useState(false);
   const [err1, setErr1] = useState<string | null>(null);
+
+  async function fetchMetadata(url: string) {
+    setErr1(null);
+    if (!url) return;
+    const res = await fetch(`/api/sheets/metadata?url=${encodeURIComponent(url)}`);
+    if (!res.ok) {
+      const msg = (await res.json().catch(() => ({}))).message || 'Не удалось получить метаданные';
+      setErr1(msg.includes('403') ? 'Нет доступа. Выдайте редакторский доступ сервисному аккаунту и повторите.' : msg);
+      setSheets([]); setSelected({}); return;
+    }
+    const data = await res.json();
+    setSrcName(data.title || 'Google Sheet');
+    setSheets(data.sheets || []);
+    const initial: Record<string, string> = {};
+    (data.sheets || []).forEach((s: SheetMeta) => { initial[s.title] = s.rangeGuess || 'A1:Z'; });
+    setSelected(initial);
+  }
 
   // Add Widget form
   const [wTitle, setWTitle] = useState('Новый виджет');
@@ -64,24 +83,20 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
     setLoading1(true);
     setErr1(null);
     try {
-      const res1 = await fetch('/api/data-sources', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret1}` },
-        body: JSON.stringify({ type: 'google_sheets', name: srcName, spreadsheetUrl: srcUrl, defaultRange: srcRange }),
-      });
-      if (!res1.ok) throw new Error('Не удалось создать источник');
-      const created = await res1.json();
-      const srcId = created.id;
-
+      const payload = {
+        name: srcName || undefined,
+        spreadsheetUrl: srcUrl,
+        sheets: Object.entries(selected).map(([title, range]) => ({ title, range })),
+      };
       const res2 = await fetch(`/api/dashboards/${slug}/data-sources`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret1}` },
-        body: JSON.stringify({ dataSourceId: srcId }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-      if (!res2.ok) throw new Error('Источник создан, но не привязан к дашборду');
+      if (!res2.ok) throw new Error((await res2.json().catch(() => ({}))).message || 'Не удалось сохранить источник');
       await refresh();
       setOpenAddSource(false);
-      setSrcName(''); setSrcUrl(''); setSrcRange('Лист1!A1:Z1000'); setSecret1('');
+      setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
     } catch (e: any) {
       setErr1(e.message || 'Ошибка');
     } finally {
@@ -122,18 +137,47 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
             <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="DS Main Sheet" />
           </label>
           <label className="block text-sm">Spreadsheet URL
-            <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+            <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} onBlur={(e) => fetchMetadata(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
           </label>
-          <label className="block text-sm">Range
-            <Input value={srcRange} onChange={(e) => setSrcRange(e.target.value)} placeholder="Лист1!A1:Z1000" />
-          </label>
-          <label className="block text-sm">Admin Secret
-            <Input type="password" value={secret1} onChange={(e) => setSecret1(e.target.value)} placeholder="Введите SYNC_SECRET" />
-          </label>
+          {sheets.length > 0 ? (
+            <div className="border rounded p-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium">Листы</div>
+                <div className="flex gap-2 text-xs">
+                  <button className="text-blue-600" onClick={() => { const all: Record<string, string> = {}; sheets.forEach(s => all[s.title] = selected[s.title] ?? s.rangeGuess ?? 'A1:Z'); setSelected(all); }}>Выбрать все</button>
+                  <button className="text-blue-600" onClick={() => setSelected({})}>Очистить</button>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-auto">
+                {sheets.map((s) => (
+                  <div key={s.title} className="flex items-center gap-2">
+                    <input type="checkbox" checked={selected[s.title] !== undefined} onChange={(e) => {
+                      const copy = { ...selected };
+                      if (e.target.checked) copy[s.title] = copy[s.title] ?? (s.rangeGuess || 'A1:Z'); else delete copy[s.title];
+                      setSelected(copy);
+                    }} />
+                    <div className="text-sm flex-1">{s.title}
+                      <div className="text-xs text-gray-500">предпросмотр: {selected[s.title] ?? s.rangeGuess ?? 'A1:Z'}</div>
+                    </div>
+                    {selected[s.title] !== undefined ? (
+                      <Input className="w-32" value={selected[s.title]} onChange={(e) => setSelected({ ...selected, [s.title]: e.target.value })} />
+                    ) : null}
+                    {selected[s.title] !== undefined ? (
+                      <button className="text-xs text-blue-600" onClick={async () => {
+                        const res = await fetch(`/api/sheets/preview?url=${encodeURIComponent(srcUrl)}&sheet=${encodeURIComponent(s.title)}&range=${encodeURIComponent(selected[s.title])}`);
+                        const data = await res.json();
+                        alert(JSON.stringify(data.rows || [], null, 2));
+                      }}>Предпросмотр</button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {err1 ? <div className="text-sm text-red-600">{err1}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddSource(false)}>Отмена</Button>
-            <Button onClick={handleAddSource} disabled={loading1 || !srcName || !srcUrl || !secret1}>{loading1 ? 'Сохранение…' : 'Сохранить'}</Button>
+            <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? 'Сохранение…' : 'Сохранить'}</Button>
           </div>
           <div className="text-xs text-gray-500">Дайте доступ редактора сервисному аккаунту: переменная GOOGLE_SHEETS_CLIENT_EMAIL</div>
         </div>
