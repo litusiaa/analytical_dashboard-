@@ -16,12 +16,24 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
   const cookie = req.headers.get('cookie') || '';
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
-  const links = await prisma.dashboardDataSourceLink.findMany({
-    where: { dashboard: slug },
-    select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true } } },
-    orderBy: { id: 'desc' },
-  });
-  const items = links; // legacy DB may not have status; filter skipped
+  // If we are in view mode and DB has status column, filter by published
+  let items: any[] = [];
+  const hasStatusCol = await prisma.$queryRawUnsafe<any[]>("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name='status' LIMIT 1");
+  if (!canEdit && Array.isArray(hasStatusCol) && hasStatusCol.length > 0) {
+    const links = await prisma.dashboardDataSourceLink.findMany({
+      where: { dashboard: slug, dataSource: { status: 'published' as any } },
+      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, status: true } } },
+      orderBy: { id: 'desc' },
+    });
+    items = links as any[];
+  } else {
+    const links = await prisma.dashboardDataSourceLink.findMany({
+      where: { dashboard: slug },
+      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true } } },
+      orderBy: { id: 'desc' },
+    });
+    items = links as any[];
+  }
   const { serializeJsonSafe } = await import('@/lib/json');
   return NextResponse.json({ items: serializeJsonSafe(items) });
 }

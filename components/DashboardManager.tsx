@@ -108,8 +108,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         throw new Error(err);
       }
       const created = await res2.json();
-      // Optimистично добавим линк в список без ожидания повторной загрузки
+      // Optimистично добавим линк
       setLinks([{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets' } }, ...links]);
+      // Перезапрос списка (edit-mode вернёт все статусы)
       await refresh();
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
@@ -220,7 +221,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddSource(false)}>Отмена</Button>
-            <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохранение…</span></>) : 'Сохранить'}</Button>
+        <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохраняем…</span></>) : 'Сохранить'}</Button>
           </div>
           <div className="text-xs text-gray-500">Дайте доступ редактора сервисному аккаунту: переменная GOOGLE_SHEETS_CLIENT_EMAIL</div>
         </div>
