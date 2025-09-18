@@ -42,7 +42,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
           ) : (
             <ul className="list-disc pl-6 space-y-1">
               {links.items.map((l) => (
-                <li key={l.id}>{l.dataSource?.name} ({l.dataSource?.type})</li>
+                <li key={l.id}>{l.dataSource?.name || 'Источник'} ({l.dataSource?.type || '—'})</li>
               ))}
             </ul>
           )}
