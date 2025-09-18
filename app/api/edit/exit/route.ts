@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { cookieName, destroySession } from '@/lib/editSession';
+const COOKIE_NAME = 'edit_mode';
 
-export async function POST(req: Request) {
-  await destroySession(req);
+export async function POST() {
   const res = NextResponse.json({ ok: true });
-  res.headers.append('Set-Cookie', `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`);
+  res.headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`);
   return res;
 }
 

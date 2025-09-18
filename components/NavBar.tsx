@@ -2,12 +2,17 @@
 import Link from 'next/link';
 import React from 'react';
 
-async function enterEdit() {
-  const code = prompt('Введите код для редактирования');
-  if (!code) return;
-  const res = await fetch('/api/edit/enter', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-  if (res.ok) location.reload();
-  else alert('Неверный код. Повторите ввод.');
+async function toggleEdit(active: boolean) {
+  if (active) {
+    await fetch('/api/edit/exit', { method: 'POST' });
+  } else {
+    await fetch('/api/edit/enter', { method: 'POST' });
+  }
+  location.reload();
+}
+
+function hasEdit(): boolean {
+  return /(?:^|;\s*)edit_mode=1(?:;|$)/.test(document.cookie);
 }
 
 export function NavBar({ title }: { title?: string }) {
@@ -17,7 +22,7 @@ export function NavBar({ title }: { title?: string }) {
         <Link href="/" className="text-sm text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50">← Все дашборды</Link>
         {title ? <div className="text-sm text-gray-500">/ {title}</div> : null}
         <div className="ml-auto">
-          <button className="text-sm text-blue-600 underline" onClick={enterEdit}>Ввести код для правки</button>
+          <button className="text-sm text-blue-600 underline px-2 py-1" onClick={() => toggleEdit(hasEdit())}>{hasEdit() ? 'Done' : 'Edit dashboard'}</button>
         </div>
       </div>
     </div>
