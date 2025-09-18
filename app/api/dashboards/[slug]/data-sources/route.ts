@@ -54,8 +54,16 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         if (hasStatus) {
           ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId, status: 'draft' } });
         } else {
+          const cols: any[] = (await tx.$queryRawUnsafe(
+            "SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'DataSource'"
+          )) as any[];
+          const needsUpdatedAt = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'updatedAt' && c.is_nullable === 'NO');
+          const insertCols: string[] = ['"type"','"name"','"spreadsheetId"'];
+          let valuesClause = '$1,$2,$3';
+          if (needsUpdatedAt) { insertCols.push('"updatedAt"'); valuesClause += ', NOW()'; }
+          const sql = `INSERT INTO "DataSource" (${insertCols.join(',')}) VALUES (${valuesClause}) RETURNING "id","name"`;
           const rows: any[] = (await tx.$queryRawUnsafe(
-            'INSERT INTO "DataSource" ("type","name","spreadsheetId") VALUES ($1,$2,$3) RETURNING "id","name"',
+            sql,
             'google_sheets',
             name || 'Google Sheet',
             spreadsheetId,
