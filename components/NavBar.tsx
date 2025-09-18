@@ -1,12 +1,24 @@
 "use client";
 import Link from 'next/link';
+import React from 'react';
+
+async function enterEdit() {
+  const code = prompt('Введите код для редактирования');
+  if (!code) return;
+  const res = await fetch('/api/edit/enter', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+  if (res.ok) location.reload();
+  else alert('Неверный код. Повторите ввод.');
+}
 
 export function NavBar({ title }: { title?: string }) {
   return (
     <div className="sticky top-0 z-10 bg-white/70 backdrop-blur border-b">
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-3">
-        <Link href="/" className="text-sm text-blue-600 hover:underline">← На главную</Link>
+        <Link href="/" className="text-sm text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50">← Все дашборды</Link>
         {title ? <div className="text-sm text-gray-500">/ {title}</div> : null}
+        <div className="ml-auto">
+          <button className="text-sm text-blue-600 underline" onClick={enterEdit}>Ввести код для правки</button>
+        </div>
       </div>
     </div>
   );

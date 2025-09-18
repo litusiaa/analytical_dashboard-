@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Status {
+  draft
+  published
+  deleted
+}
+
 model pd_users {
   id         BigInt   @id
   name       String?
@@ -106,11 +112,18 @@ model DataSource {
   // google sheets specific
   spreadsheetId String?
   defaultRange  String?
+  lastSyncedAt  DateTime?
 
   // relations
   links         DashboardDataSourceLink[]
   widgets       Widget[]
   sheets        DataSourceSheet[]
+
+  // publishing & audit
+  status        Status   @default(published)
+  last_edited_by String?
+  last_edited_at DateTime?
+  deleted_at     DateTime?
 }
 
 model DashboardDataSourceLink {
@@ -138,6 +151,12 @@ model Widget {
   dataSource   DataSource? @relation(fields: [dataSourceId], references: [id])
 
   @@index([dashboard])
+
+  // publishing & audit
+  status        Status   @default(published)
+  last_edited_by String?
+  last_edited_at DateTime?
+  deleted_at     DateTime?
 }
 
 model DataSourceSheet {
@@ -150,5 +169,27 @@ model DataSourceSheet {
   dataSource   DataSource @relation(fields: [dataSourceId], references: [id])
 
   @@index([dataSourceId])
+}
+
+model edit_sessions {
+  id          BigInt   @id @default(autoincrement())
+  token_hash  String   @unique
+  dashboard   String?
+  created_at  DateTime @default(now())
+  expires_at  DateTime
+  ip          String?
+}
+
+model audit_logs {
+  id             BigInt   @id @default(autoincrement())
+  actor_id       String
+  action_type    String
+  target_type    String
+  target_id      String
+  payload_before Json?
+  payload_after  Json?
+  comment        String?
+  created_at     DateTime @default(now())
+  ip             String?
 }
 

@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import React from 'react';
+import { EditBanner } from '@/components/EditBanner';
 import { DashboardManager } from '@/components/DashboardManager';
 
 async function safeGet<T>(path: string, fallback: T): Promise<T> {
@@ -23,6 +24,9 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
 
   return (
     <main>
+      {/* Banner will be shown when cookie present; for MVP always show bar when cookie exists on client */}
+      {/* Client banner component handles countdown and actions */}
+      <EditBanner />
       <NavBar title={slug.toUpperCase()} />
       <div className="max-w-7xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard: {slug.toUpperCase()}</h1>
@@ -30,11 +34,15 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
       <Card>
         <CardHeader>Источники этого дашборда</CardHeader>
         <CardContent>
-          <ul className="list-disc pl-6 space-y-1">
-            {links.items.map((l) => (
-              <li key={l.id}>{l.dataSource?.name} ({l.dataSource?.type})</li>
-            ))}
-          </ul>
+          {links.items.length === 0 ? (
+            <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
+          ) : (
+            <ul className="list-disc pl-6 space-y-1">
+              {links.items.map((l) => (
+                <li key={l.id}>{l.dataSource?.name} ({l.dataSource?.type})</li>
+              ))}
+            </ul>
+          )}
           <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} /></div>
         </CardContent>
       </Card>
@@ -43,7 +51,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
         <CardHeader>Виджеты</CardHeader>
         <CardContent>
           {widgets.items.length === 0 ? (
-            <div className="text-sm text-gray-500">Пока нет виджетов. Добавьте через POST /api/dashboards/{slug}/widgets</div>
+            <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
           ) : (
             <ul className="list-disc pl-6 space-y-1">
               {widgets.items.map((w) => (

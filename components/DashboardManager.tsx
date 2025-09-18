@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/Input';
+import { Spinner } from '@/components/Spinner';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
@@ -43,7 +44,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
     const res = await fetch(`/api/sheets/metadata?url=${encodeURIComponent(url)}`);
     if (!res.ok) {
       const msg = (await res.json().catch(() => ({}))).message || 'Не удалось получить метаданные';
-      setErr1(msg.includes('403') ? 'Нет доступа. Выдайте редакторский доступ сервисному аккаунту и повторите.' : msg);
+      setErr1(msg.includes('403') ? 'Выдайте доступ редактора сервисному аккаунту и повторите' : (msg.includes('Invalid') ? 'Неверная ссылка Google Sheets' : msg));
       setSheets([]); setSelected({}); return;
     }
     const data = await res.json();
@@ -177,7 +178,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets }: { slug:
           {err1 ? <div className="text-sm text-red-600">{err1}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddSource(false)}>Отмена</Button>
-            <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? 'Сохранение…' : 'Сохранить'}</Button>
+            <Button onClick={handleAddSource} disabled={loading1 || !srcUrl || Object.keys(selected).length === 0}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохранение…</span></>) : 'Сохранить'}</Button>
           </div>
           <div className="text-xs text-gray-500">Дайте доступ редактора сервисному аккаунту: переменная GOOGLE_SHEETS_CLIENT_EMAIL</div>
         </div>
