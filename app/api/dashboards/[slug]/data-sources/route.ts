@@ -44,7 +44,24 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       if (!spreadsheetId) return NextResponse.json({ message: 'Invalid Google Sheets URL' }, { status: 400 });
 
       const result = await prisma.$transaction(async (tx) => {
-        const ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId, status: 'draft' } });
+        let ds: any;
+        try {
+          ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId, status: 'draft' } });
+        } catch (err: any) {
+          const msg = String(err?.message || err);
+          if (msg.includes('column') && msg.includes('status')) {
+            const rows: Array<{ id: bigint; name: string }>[] = await tx.$queryRawUnsafe(
+              'INSERT INTO "DataSource" ("type","name","spreadsheetId") VALUES ($1,$2,$3) RETURNING "id","name"',
+              'google_sheets',
+              name || 'Google Sheet',
+              spreadsheetId,
+            ) as any;
+            const row = Array.isArray(rows) ? (rows[0] as any) : rows;
+            ds = { id: row.id, name: row.name };
+          } else {
+            throw err;
+          }
+        }
         if (sheets?.length) {
           const normalized = sheets.map((s) => normalizeSheetInput(s)).map((s) => ({ dataSourceId: ds.id, title: s.title, range: s.range ?? null }));
           await tx.dataSourceSheet.createMany({ data: normalized });
