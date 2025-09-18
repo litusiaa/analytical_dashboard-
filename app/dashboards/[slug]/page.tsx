@@ -1,4 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
+import { NavBar } from '@/components/NavBar';
+import { Modal } from '@/components/Modal';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
+import React from 'react';
 
 async function safeGet<T>(path: string, fallback: T): Promise<T> {
   try {
@@ -16,7 +21,9 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
   const widgets = await safeGet<{ items: any[] }>(`/api/dashboards/${slug}/widgets`, { items: [] });
 
   return (
-    <main className="max-w-7xl mx-auto p-6 space-y-6">
+    <main>
+      <NavBar title={slug.toUpperCase()} />
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Дашборд: {slug.toUpperCase()}</h1>
 
       <Card>
@@ -45,6 +52,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
           )}
         </CardContent>
       </Card>
+      </div>
     </main>
   );
 }
