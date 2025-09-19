@@ -38,16 +38,7 @@ export default async function DashboardSlugPage({ params }: { params: { slug: st
       <Card>
         <CardHeader>Источники этого дашборда</CardHeader>
         <CardContent>
-          {links.items.length === 0 ? (
-            <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
-          ) : (
-            <ul className="list-disc pl-6 space-y-1">
-              {links.items.map((l) => (
-                <li key={l.id}>{l.dataSource?.name || 'Источник'} ({l.dataSource?.type || '—'})</li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-3"><DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} serviceEmail={serviceEmail} canEdit={isEdit} /></div>
+          <DashboardManager slug={slug} initialLinks={links.items} initialWidgets={widgets.items} serviceEmail={serviceEmail} canEdit={isEdit} />
         </CardContent>
       </Card>
 
