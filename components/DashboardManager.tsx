@@ -7,6 +7,47 @@ import { Spinner } from '@/components/Spinner';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
+function TableWidgetPreview({ dataSourceId, sheetTitle, range }: { dataSourceId: number; sheetTitle: string; range: string }) {
+  const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][] }>({ loading: true });
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/data-sources/${dataSourceId}/read?sheet=${encodeURIComponent(sheetTitle)}&range=${encodeURIComponent(range)}&limit=10`, { cache: 'no-store', credentials: 'include' });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error || 'Ошибка загрузки');
+        if (!cancelled) setState({ loading: false, columns: j.columns || [], rows: j.rows || [] });
+      } catch (e: any) {
+        if (!cancelled) setState({ loading: false, error: e.message || 'Ошибка' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [dataSourceId, sheetTitle, range]);
+
+  if (state.loading) return <div className="text-xs text-gray-500">Loading…</div>;
+  if (state.error) return <div className="text-xs text-red-600">{state.error}</div>;
+  const cols = state.columns || [];
+  const rows = state.rows || [];
+  if (rows.length === 0) return <div className="text-xs text-gray-500">Пусто</div>;
+  return (
+    <div className="overflow-auto border rounded">
+      <table className="min-w-full text-xs">
+        <thead className="bg-gray-50 sticky top-0">
+          <tr>
+            {cols.map((c, i) => (<th key={i} className="px-2 py-1 text-left border-b">{String(c)}</th>))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, idx) => (
+            <tr key={idx} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
+              {r.map((cell: any, ci: number) => (<td key={ci} className="px-2 py-1 border-b">{String(cell ?? '')}</td>))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 type DataSource = { id: number; name: string; type: string };
 
 async function safeGet<T>(url: string, fallback: T): Promise<T> {
@@ -195,9 +236,12 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <ul className="space-y-2">
             {widgets.map((w) => (
               <li key={w.id} className="border rounded p-2 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-2">
                   <div>{w.title} ({w.type})</div>
                 </div>
+                {w.type === 'table' ? (
+                  <TableWidgetPreview dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} />
+                ) : null}
               </li>
             ))}
           </ul>
