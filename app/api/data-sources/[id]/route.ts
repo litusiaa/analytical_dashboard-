@@ -1,19 +1,28 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-function authorized(req: Request): boolean {
-  const bearer = req.headers.get('authorization');
-  const token = bearer?.startsWith('Bearer ') ? bearer.substring('Bearer '.length) : undefined;
-  const secret = token || new URL(req.url).searchParams.get('secret');
-  return Boolean(secret && process.env.SYNC_SECRET && secret === process.env.SYNC_SECRET);
+function canEdit(req: Request): boolean {
+  const cookie = req.headers.get('cookie') || '';
+  return /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  if (!authorized(_req)) return NextResponse.json({ message: 'Invalid or missing SYNC_SECRET' }, { status: 401 });
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  if (!canEdit(req)) return NextResponse.json({ error: 'Editing is disabled. Enable Edit dashboard.' }, { status: 401 });
   const id = BigInt(params.id);
-  await prisma.dashboardDataSourceLink.deleteMany({ where: { dataSourceId: id } });
-  await prisma.widget.updateMany({ where: { dataSourceId: id }, data: { dataSourceId: null } });
-  await prisma.dataSource.delete({ where: { id } });
+  const url = new URL(req.url);
+  const cascade = url.searchParams.get('cascade') === 'true';
+
+  const widgets = await prisma.widget.findMany({ where: { dataSourceId: id }, select: { id: true, title: true } });
+  if (widgets.length > 0 && !cascade) {
+    return NextResponse.json({ code: 'IN_USE', widgets }, { status: 409 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (widgets.length > 0 && cascade) {
+      await tx.widget.updateMany({ where: { dataSourceId: id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
+    }
+    await tx.dataSource.update({ where: { id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
+  });
   return NextResponse.json({ ok: true });
 }
 

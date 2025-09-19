@@ -19,4 +19,9 @@ jobs:
       - run: npx prisma db push
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Purge trash older than 10 days
+        run: |
+          node -e "(async () => { const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); const cutoff = new Date(Date.now() - 10*24*60*60*1000); await prisma.widget.deleteMany({ where: { deleted_at: { lt: cutoff } } }); await prisma.dataSource.deleteMany({ where: { deleted_at: { lt: cutoff } } }); console.log('Purged old trash'); await prisma.$disconnect(); })().catch(e => { console.error(e); process.exit(0); });"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
