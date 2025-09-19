@@ -21,7 +21,13 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name='status' LIMIT 1"
   );
   const where: any = { dashboard: slug };
-  if (!canEdit && Array.isArray(hasStatus) && hasStatus.length > 0) where.status = 'published';
+  if (Array.isArray(hasStatus) && hasStatus.length > 0) {
+    if (!canEdit) {
+      where.status = 'published';
+    } else {
+      where.status = { in: ['draft','published'] } as any;
+    }
+  }
   const select: any = { id: true, type: true, title: true, config: true, createdAt: true, updatedAt: true };
   if (Array.isArray(hasStatus) && hasStatus.length > 0) select.status = true;
   const items = await prisma.widget.findMany({ where, orderBy: { order: 'asc' }, select });

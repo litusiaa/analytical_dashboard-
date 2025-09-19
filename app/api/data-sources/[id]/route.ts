@@ -10,7 +10,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   if (!canEdit(req)) return NextResponse.json({ error: 'Editing is disabled. Enable Edit dashboard.' }, { status: 401 });
   const id = BigInt(params.id);
   const url = new URL(req.url);
-  const cascade = url.searchParams.get('cascade') === 'true';
+  const cascade = url.searchParams.get('cascade') === 'true' || url.searchParams.get('force') === 'true';
 
   const widgets = await prisma.widget.findMany({ where: { dataSourceId: id }, select: { id: true, title: true } });
   if (widgets.length > 0 && !cascade) {
@@ -23,6 +23,6 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     }
     await tx.dataSource.update({ where: { id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: Number(id) });
 }
 

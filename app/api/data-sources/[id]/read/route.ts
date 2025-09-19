@@ -6,7 +6,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const url = new URL(req.url);
   const sheet = url.searchParams.get('sheet') || '';
   let range = url.searchParams.get('range') || 'A1:Z';
-  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') || '50')));
+  const limitParam = url.searchParams.get('limit');
+  const offsetParam = url.searchParams.get('offset');
+  const limit = Math.max(1, Math.min(5000, Number(limitParam || '1000')));
+  const offset = Math.max(0, Number(offsetParam || '0'));
 
   const id = BigInt(params.id);
   const ds = await prisma.dataSource.findUnique({ where: { id } });
@@ -20,7 +23,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   try {
     const values = await readValues(ds.spreadsheetId, `${sheet}!${range}`);
     const columns = values[0] || [];
-    const rows = values.slice(1, 1 + limit);
+    const allRows = values.slice(1);
+    const rows = allRows.slice(offset, offset + limit);
     const payload = { columns, rows, total: values.length > 0 ? values.length - 1 : 0, lastSyncedAt: ds.lastSyncedAt ? ds.lastSyncedAt.toISOString?.() : undefined } as any;
     return new NextResponse(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   } catch (e: any) {

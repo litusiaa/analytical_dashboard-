@@ -7,16 +7,16 @@ import { Spinner } from '@/components/Spinner';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
-function TableWidgetPreview({ dataSourceId, sheetTitle, range }: { dataSourceId: number; sheetTitle: string; range: string }) {
-  const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][] }>({ loading: true });
+function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000 }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number }) {
+  const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][]; total?: number }>({ loading: true });
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/data-sources/${dataSourceId}/read?sheet=${encodeURIComponent(sheetTitle)}&range=${encodeURIComponent(range)}&limit=10`, { cache: 'no-store', credentials: 'include' });
+        const res = await fetch(`/api/data-sources/${dataSourceId}/read?sheet=${encodeURIComponent(sheetTitle)}&range=${encodeURIComponent(range)}&limit=${pageSize}&offset=0`, { cache: 'no-store', credentials: 'include' });
         const j = await res.json();
         if (!res.ok) throw new Error(j?.error || 'Ошибка загрузки');
-        if (!cancelled) setState({ loading: false, columns: j.columns || [], rows: j.rows || [] });
+        if (!cancelled) setState({ loading: false, columns: j.columns || [], rows: j.rows || [], total: j.total });
       } catch (e: any) {
         if (!cancelled) setState({ loading: false, error: e.message || 'Ошибка' });
       }
@@ -31,6 +31,7 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range }: { dataSourceId:
   if (rows.length === 0) return <div className="text-xs text-gray-500">Пусто</div>;
   return (
     <div className="overflow-auto border rounded">
+      <div className="text-[11px] text-gray-600 px-2 py-1">Rows: {state.total ?? rows.length}</div>
       <table className="min-w-full text-xs">
         <thead className="bg-gray-50 sticky top-0">
           <tr>
@@ -265,7 +266,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   ) : null}
                 </div>
                 {w.type === 'table' ? (
-                  <TableWidgetPreview dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} />
+                  <TableWidgetPreview dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
                 ) : null}
               </li>
             ))}

@@ -10,7 +10,7 @@ export async function DELETE(req: Request, { params }: { params: { slug: string;
   if (!canEdit(req)) return NextResponse.json({ error: 'Editing is disabled. Enable Edit dashboard.' }, { status: 401 });
   const id = BigInt(params.id);
   await prisma.widget.update({ where: { id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: Number(id) });
 }
 
 export async function PUT(req: Request, { params }: { params: { slug: string; id: string } }) {
