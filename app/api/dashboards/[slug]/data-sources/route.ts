@@ -64,6 +64,10 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       const spreadsheetId = parseSpreadsheetIdFromUrl(spreadsheetUrl);
       if (!spreadsheetId) return NextResponse.json({ message: 'Invalid Google Sheets URL' }, { status: 400 });
 
+      // DUPLICATE GUARD: if a data source with same spreadsheetId is already linked to this dashboard, block
+      const existing = await prisma.dashboardDataSourceLink.findFirst({ where: { dashboard: slug, dataSource: { spreadsheetId } } });
+      if (existing) return NextResponse.json({ code: 'DUPLICATE', message: 'Этот источник уже привязан к дашборду' }, { status: 409 });
+
       const result = await prisma.$transaction(async (tx) => {
         // Detect if legacy DB without `status` column
         const col: any[] = (await tx.$queryRawUnsafe(

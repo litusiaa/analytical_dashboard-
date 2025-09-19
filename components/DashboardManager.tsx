@@ -66,6 +66,7 @@ type SheetMeta = { title: string; rangeGuess: string };
 export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail, canEdit }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string; canEdit: boolean }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
+  const [tab, setTab] = useState<'pub'|'draft'|'trash'>('pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
 
   // Modals
@@ -208,21 +209,34 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         <Button variant="secondary" onClick={() => (canEdit ? setOpenAddWidget(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить виджет</Button>
       </div>
 
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <button className={`px-2 py-1 rounded ${tab==='pub'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('pub')}>Опубликованные</button>
+        <button className={`px-2 py-1 rounded ${tab==='draft'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('draft')}>Черновики</button>
+        <button className={`px-2 py-1 rounded ${tab==='trash'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('trash')}>Корзина</button>
+      </div>
+
       <div className="mt-3">
         {links.length === 0 ? (
           <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
         ) : (
           <ul className="list-disc pl-6 space-y-1">
-            {links.map((l) => {
+            {links
+              .filter((l) => {
+                const st = (l as any).dataSource?.status;
+                if (tab==='trash') return st==='deleted';
+                if (tab==='draft') return st==='draft';
+                return st==='published' || !st;
+              })
+              .map((l) => {
               const ds: any = (l as any).dataSource || {};
               const status: string | undefined = ds.status;
               return (
                 <li key={l.id} className="flex items-center gap-2">
                   <span>{ds.name || 'Источник'} ({ds.type || '—'})</span>
                   {status ? (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{status === 'published' ? 'Published' : 'Draft'}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : status==='draft' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'}`}>{status === 'published' ? 'Published' : status==='draft'?'Draft':'Deleted'}</span>
                   ) : null}
-                  {canEdit ? (
+                  {canEdit && status!=='deleted' ? (
                     <button className="ml-auto text-red-600 text-xs" onClick={async () => {
                       if (!confirm('Переместить источник в корзину?')) return;
                       const res = await fetch(`/api/data-sources/${(l as any).dataSourceId}`, { method: 'DELETE', credentials: 'include' });
@@ -230,7 +244,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         const j = await res.json().catch(() => ({}));
                         const titles = (j.widgets || []).map((w: any) => w.title).join(', ');
                         if (confirm(`Источник используется виджетами: ${titles}\nУдалить вместе с виджетами?`)) {
-                          await fetch(`/api/data-sources/${(l as any).dataSourceId}?cascade=true`, { method: 'DELETE', credentials: 'include' });
+                          await fetch(`/api/data-sources/${(l as any).dataSourceId}?force=true`, { method: 'DELETE', credentials: 'include' });
                         } else {
                           return;
                         }
@@ -252,11 +266,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
         ) : (
           <ul className="space-y-2">
-            {widgets.map((w) => (
+            {widgets
+              .filter((w: any) => {
+                const st = (w as any).status;
+                if (tab==='trash') return st==='deleted';
+                if (tab==='draft') return st==='draft';
+                return st==='published' || !st;
+              })
+              .map((w) => (
               <li key={w.id} className="border rounded p-2 text-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div>{w.title} ({w.type})</div>
-                  {canEdit ? (
+                  {canEdit && (w as any).status!=='deleted' ? (
                     <button className="text-red-600 text-xs" onClick={async () => {
                       if (!confirm('Переместить виджет в корзину?')) return;
                       await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
