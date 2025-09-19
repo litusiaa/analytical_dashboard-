@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   if (Array.isArray(hasStatus) && hasStatus.length > 0) select.status = true;
   const items = await prisma.widget.findMany({ where, orderBy: { order: 'asc' }, select });
   const { serializeJsonSafe } = await import('@/lib/json');
-  return NextResponse.json({ items: serializeJsonSafe(items) });
+  return NextResponse.json({ items: serializeJsonSafe(items) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {

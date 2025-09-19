@@ -40,7 +40,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     items = links as any[];
   }
   const { serializeJsonSafe } = await import('@/lib/json');
-  return NextResponse.json({ items: serializeJsonSafe(items) });
+  return NextResponse.json({ items: serializeJsonSafe(items) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {

@@ -73,9 +73,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   async function refresh() {
     const [l, w, s] = await Promise.all([
-      safeGet<{ items: LinkItem[] }>(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { items: [] }),
-      safeGet<{ items: WidgetItem[] }>(`/api/dashboards/${slug}/widgets?ts=${Date.now()}`, { items: [] }),
-      safeGet<{ items: DataSource[] }>(`/api/data-sources?ts=${Date.now()}`, { items: [] }),
+      fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
+      fetch(`/api/dashboards/${slug}/widgets?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
+      fetch(`/api/data-sources?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
     ]);
     setLinks(l.items || []);
     setWidgets(w.items || []);
