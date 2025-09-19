@@ -108,10 +108,16 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         throw new Error(err);
       }
       const created = await res2.json();
-      // Optimистично добавим линк
-      setLinks([{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets' } }, ...links]);
-      // Перезапрос списка (edit-mode вернёт все статусы)
-      await refresh();
+      // Оптимистично добавим линк
+      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets' } }, ...prev]);
+      // Пробуем перезапросить список; если неуспех — оставляем оптимистичный
+      try {
+        const resL = await fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store' });
+        if (resL.ok) {
+          const dataL = await resL.json();
+          setLinks(dataL.items || []);
+        }
+      } catch {}
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
     } catch (e: any) {

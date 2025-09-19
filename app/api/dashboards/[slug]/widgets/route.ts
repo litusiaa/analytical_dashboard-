@@ -19,7 +19,8 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   const where: any = { dashboard: slug };
   if (!canEdit) where.status = 'published';
   const items = await prisma.widget.findMany({ where, orderBy: { order: 'asc' } });
-  return NextResponse.json({ items });
+  const { serializeJsonSafe } = await import('@/lib/json');
+  return NextResponse.json({ items: serializeJsonSafe(items) });
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {
@@ -31,7 +32,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     const { type, title, dataSourceId, config } = body || {};
     if (!type || !title) return NextResponse.json({ message: 'type and title are required' }, { status: 400 });
     const item = await prisma.widget.create({ data: { dashboard: slug, type, title, dataSourceId: dataSourceId ? BigInt(dataSourceId) : null, config: config ?? null, status: 'draft' } });
-    return NextResponse.json({ id: item.id }, { status: 201 });
+    return NextResponse.json({ id: Number(item.id) }, { status: 201 });
   } catch (e: any) {
     const msg = String(e?.message || e);
     const details = e?.code ? { code: e.code } : undefined;
