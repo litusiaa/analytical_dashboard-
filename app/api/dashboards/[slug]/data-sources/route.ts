@@ -104,6 +104,22 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
           }
         }
         const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: dsId } });
+        // Auto-create a table widget for the first selected sheet, if any
+        if (sheets && sheets.length > 0) {
+          const first = normalizeSheetInput(sheets[0]);
+          const hasWidgetStatus = await tx.$queryRawUnsafe<any[]>(
+            "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name='status' LIMIT 1"
+          );
+          const widgetData: any = {
+            dashboard: slug,
+            type: 'table',
+            title: `Table — ${first.title}`,
+            dataSourceId: dsId,
+            config: { dataSourceId: Number(dsId), sheetTitle: first.title, range: first.range || 'A1:Z', options: { pageSize: 50 } },
+          };
+          if (Array.isArray(hasWidgetStatus) && hasWidgetStatus.length > 0) widgetData.status = 'draft';
+          await tx.widget.create({ data: widgetData });
+        }
         return { ds, link };
       });
       const id = Number(result.link.id);

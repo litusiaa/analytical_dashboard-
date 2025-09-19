@@ -65,7 +65,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [wTitle, setWTitle] = useState('Новый виджет');
   const [wType, setWType] = useState<'table' | 'line' | 'bar'>('table');
   const [wDataSourceId, setWDataSourceId] = useState<number | undefined>(undefined);
-  const [wRange, setWRange] = useState('Лист1!A1:Z100');
+  const [wSheetTitle, setWSheetTitle] = useState<string>('');
+  const [wRange, setWRange] = useState('A1:Z');
   const [secret2, setSecret2] = useState('');
   const [loading2, setLoading2] = useState(false);
   const [err2, setErr2] = useState<string | null>(null);
@@ -117,6 +118,12 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           const dataL = await resL.json();
           setLinks(dataL.items || []);
         }
+        // Авто‑виджет создаётся на сервере — подтянем список виджетов
+        const resW = await fetch(`/api/dashboards/${slug}/widgets?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' });
+        if (resW.ok) {
+          const dataW = await resW.json();
+          setWidgets(dataW.items || []);
+        }
       } catch {}
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
@@ -134,13 +141,15 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       const res = await fetch(`/api/dashboards/${slug}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: wType, title: wTitle, dataSourceId: wDataSourceId, config: { range: wRange } }),
+        body: JSON.stringify({ type: 'table', title: wTitle, dataSourceId: wDataSourceId, sheetTitle: wSheetTitle, range: wRange, options: { pageSize: 50 } }),
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Не удалось создать виджет');
+      const created = await res.json();
+      setWidgets([{ id: created.id, title: created.title, type: created.type }, ...widgets]);
       await refresh();
       setOpenAddWidget(false);
-      setWTitle('Новый виджет'); setWType('table'); setWRange('Лист1!A1:Z100'); setSecret2('');
+      setWTitle('Новый виджет'); setWType('table'); setWRange('A1:Z'); setWSheetTitle(''); setSecret2('');
     } catch (e: any) {
       setErr2(e.message || 'Ошибка');
     } finally {
@@ -178,6 +187,22 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         )}
       </div>
 
+      <div className="mt-6">
+        <div className="text-sm font-medium mb-2">Виджеты</div>
+        {widgets.length === 0 ? (
+          <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
+        ) : (
+          <ul className="space-y-2">
+            {widgets.map((w) => (
+              <li key={w.id} className="border rounded p-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <div>{w.title} ({w.type})</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <Modal open={canEdit && openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник (Google Sheets)">
         <div className="space-y-3">
           {/* success toast placeholder (removed undefined component) */}
@@ -259,13 +284,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Заголовок
             <Input value={wTitle} onChange={(e) => setWTitle(e.target.value)} />
           </label>
-          <label className="block text-sm">Тип
-            <select className="border rounded px-3 py-2 text-sm w-full" value={wType} onChange={(e) => setWType(e.target.value as any)}>
-              <option value="table">Table</option>
-              <option value="line">Line</option>
-              <option value="bar">Bar</option>
-            </select>
-          </label>
+          <div className="text-xs text-gray-600">Тип: Table</div>
           <label className="block text-sm">Источник
             <select className="border rounded px-3 py-2 text-sm w-full" value={wDataSourceId ?? ''} onChange={(e) => setWDataSourceId(e.target.value ? Number(e.target.value) : undefined)}>
               <option value="">— выберите источник —</option>
@@ -274,14 +293,17 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               ))}
             </select>
           </label>
+          <label className="block text-sm">Sheet title
+            <Input value={wSheetTitle} onChange={(e) => setWSheetTitle(e.target.value)} placeholder="Лист1" />
+          </label>
           <label className="block text-sm">Диапазон (Range)
-            <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="Лист1!A1:D100" />
+            <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="A1:Z" />
           </label>
           {/* Admin Secret removed for UI operations */}
           {err2 ? <div className="text-sm text-red-600">{err2}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpenAddWidget(false)}>Отмена</Button>
-            <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
+            <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId || !wSheetTitle}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
           </div>
         </div>
       </Modal>
