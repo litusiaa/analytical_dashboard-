@@ -19,9 +19,18 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
   await prisma.$transaction(async (tx) => {
     if (widgets.length > 0 && cascade) {
-      await tx.widget.updateMany({ where: { dataSourceId: id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
+      // Support both deletedAt and deleted_at depending on DB schema
+      const col: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name IN ('deletedAt','deleted_at')");
+      const hasCamel = Array.isArray(col) && col.some((c: any) => c.column_name === 'deletedAt');
+      const data: any = { status: 'deleted' };
+      if (hasCamel) data.deletedAt = new Date(); else (data as any).deleted_at = new Date();
+      await tx.widget.updateMany({ where: { dataSourceId: id }, data });
     }
-    await tx.dataSource.update({ where: { id }, data: { status: 'deleted' as any, deleted_at: new Date() } as any });
+    const col2: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name IN ('deletedAt','deleted_at')");
+    const hasCamel2 = Array.isArray(col2) && col2.some((c: any) => c.column_name === 'deletedAt');
+    const data2: any = { status: 'deleted' };
+    if (hasCamel2) data2.deletedAt = new Date(); else (data2 as any).deleted_at = new Date();
+    await tx.dataSource.update({ where: { id }, data: data2 });
   });
   return NextResponse.json({ ok: true, id: Number(id) });
 }
