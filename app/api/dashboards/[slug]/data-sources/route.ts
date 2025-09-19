@@ -18,18 +18,23 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
   // If we are in view mode and DB has status column, filter by published
   let items: any[] = [];
-  const hasStatusCol = await prisma.$queryRawUnsafe<any[]>("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name='status' LIMIT 1");
-  if (!canEdit && Array.isArray(hasStatusCol) && hasStatusCol.length > 0) {
+  const cols = await prisma.$queryRawUnsafe<any[]>(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name IN ('status','lastSyncedAt')"
+  );
+  const hasStatusCol = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'status');
+  const hasLastSyncedAt = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'lastSyncedAt');
+
+  if (!canEdit && hasStatusCol) {
     const links = await prisma.dashboardDataSourceLink.findMany({
       where: { dashboard: slug, dataSource: { status: 'published' as any } },
-      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, status: true } } },
+      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, status: true, ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
       orderBy: { id: 'desc' },
     });
     items = links as any[];
   } else {
     const links = await prisma.dashboardDataSourceLink.findMany({
       where: { dashboard: slug },
-      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true } } },
+      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
       orderBy: { id: 'desc' },
     });
     items = links as any[];

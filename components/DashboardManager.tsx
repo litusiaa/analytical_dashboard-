@@ -162,9 +162,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
         ) : (
           <ul className="list-disc pl-6 space-y-1">
-            {links.map((l) => (
-              <li key={l.id}>{(l as any).dataSource?.name || 'Источник'} ({(l as any).dataSource?.type || '—'})</li>
-            ))}
+            {links.map((l) => {
+              const ds: any = (l as any).dataSource || {};
+              const status: string | undefined = ds.status;
+              return (
+                <li key={l.id} className="flex items-center gap-2">
+                  <span>{ds.name || 'Источник'} ({ds.type || '—'})</span>
+                  {status ? (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{status === 'published' ? 'Published' : 'Draft'}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

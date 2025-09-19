@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { NavBar } from '@/components/NavBar';
 import { Modal } from '@/components/Modal';
