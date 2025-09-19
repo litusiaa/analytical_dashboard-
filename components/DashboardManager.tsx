@@ -157,6 +157,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         <Button variant="secondary" onClick={() => (canEdit ? setOpenAddWidget(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить виджет</Button>
       </div>
 
+      <div className="mt-3">
+        {links.length === 0 ? (
+          <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
+        ) : (
+          <ul className="list-disc pl-6 space-y-1">
+            {links.map((l) => (
+              <li key={l.id}>{(l as any).dataSource?.name || 'Источник'} ({(l as any).dataSource?.type || '—'})</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <Modal open={canEdit && openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник (Google Sheets)">
         <div className="space-y-3">
           {/* success toast placeholder (removed undefined component) */}
