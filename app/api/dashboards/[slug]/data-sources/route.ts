@@ -33,7 +33,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     items = links as any[];
   } else {
     const links = await prisma.dashboardDataSourceLink.findMany({
-      where: { dashboard: slug },
+      where: hasStatusCol ? { dashboard: slug, dataSource: { status: { in: ['draft','published'] } as any } } as any : { dashboard: slug },
       select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
       orderBy: { id: 'desc' },
     });

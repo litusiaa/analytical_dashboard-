@@ -221,6 +221,23 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   {status ? (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{status === 'published' ? 'Published' : 'Draft'}</span>
                   ) : null}
+                  {canEdit ? (
+                    <button className="ml-auto text-red-600 text-xs" onClick={async () => {
+                      if (!confirm('Переместить источник в корзину?')) return;
+                      const res = await fetch(`/api/data-sources/${(l as any).dataSourceId}`, { method: 'DELETE', credentials: 'include' });
+                      if (res.status === 409) {
+                        const j = await res.json().catch(() => ({}));
+                        const titles = (j.widgets || []).map((w: any) => w.title).join(', ');
+                        if (confirm(`Источник используется виджетами: ${titles}\nУдалить вместе с виджетами?`)) {
+                          await fetch(`/api/data-sources/${(l as any).dataSourceId}?cascade=true`, { method: 'DELETE', credentials: 'include' });
+                        } else {
+                          return;
+                        }
+                      }
+                      setLinks((prev) => prev.filter((x) => x.id !== l.id));
+                      await refresh();
+                    }}>Удалить</button>
+                  ) : null}
                 </li>
               );
             })}
@@ -238,6 +255,14 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               <li key={w.id} className="border rounded p-2 text-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div>{w.title} ({w.type})</div>
+                  {canEdit ? (
+                    <button className="text-red-600 text-xs" onClick={async () => {
+                      if (!confirm('Переместить виджет в корзину?')) return;
+                      await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
+                      setWidgets((prev) => prev.filter((x) => x.id !== w.id));
+                      await refresh();
+                    }}>Удалить</button>
+                  ) : null}
                 </div>
                 {w.type === 'table' ? (
                   <TableWidgetPreview dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} />
