@@ -22,7 +22,8 @@ export async function DELETE(req: Request, { params }: { params: { slug: string;
     // widgets of this dashboard using this data source
     const widgets = await prisma.widget.findMany({ where: { dashboard: slug, dataSourceId: dsId }, select: { id: true, title: true } });
     if (!hard && widgets.length > 0 && !force) {
-      return NextResponse.json({ code: 'IN_USE', widgets }, { status: 409, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+      const widgetsClean = widgets.map((w) => ({ id: Number(w.id), title: w.title }));
+      return NextResponse.json({ code: 'IN_USE', widgets: widgetsClean }, { status: 409, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
     }
 
     await prisma.$transaction(async (tx) => {
