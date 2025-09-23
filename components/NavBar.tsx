@@ -15,7 +15,7 @@ async function toggleEdit(active: boolean) {
 
 export function NavBar({ title, initialActive = false }: { title?: string; initialActive?: boolean }) {
   return (
-    <div className="sticky top-0 z-10 bg-white/70 backdrop-blur border-b">
+    <div className={`sticky top-0 z-10 border-b ${initialActive ? 'bg-gray-100' : 'bg-white/70 backdrop-blur'}`}>
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-3">
         <Link href="/" className="text-sm text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50">← Все дашборды</Link>
         {title ? <div className="text-sm text-gray-500">/ {title}</div> : null}

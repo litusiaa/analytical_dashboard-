@@ -272,20 +272,24 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   return (
     <>
-      <div className="flex gap-2">
-        <Button onClick={() => (canEdit ? setOpenAddSource(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить источник</Button>
-        <Button variant="secondary" onClick={() => (canEdit ? setOpenAddWidget(true) : null)} disabled={!canEdit} title={canEdit ? '' : 'Включите Edit dashboard, чтобы редактировать'}>Добавить виджет</Button>
-      </div>
+      {canEdit ? (
+        <div className="flex gap-2">
+          <Button onClick={() => setOpenAddSource(true)}>Добавить источник</Button>
+          <Button variant="secondary" onClick={() => setOpenAddWidget(true)}>Добавить виджет</Button>
+        </div>
+      ) : null}
 
-      <div className="mt-3 flex items-center gap-2 text-xs">
-        <button className={`px-2 py-1 rounded ${tab==='pub'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('pub')}>Опубликованные</button>
-        <button className={`px-2 py-1 rounded ${tab==='draft'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('draft')}>Черновики</button>
-        <button className={`px-2 py-1 rounded ${tab==='trash'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('trash')}>Корзина</button>
-      </div>
+      {canEdit ? (
+        <div className="mt-3 flex items-center gap-2 text-xs">
+          <button className={`px-2 py-1 rounded ${tab==='pub'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('pub')}>Опубликованные</button>
+          <button className={`px-2 py-1 rounded ${tab==='draft'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('draft')}>Черновики</button>
+          <button className={`px-2 py-1 rounded ${tab==='trash'?'bg-blue-600 text-white':'bg-gray-100'}`} onClick={()=>setTab('trash')}>Корзина</button>
+        </div>
+      ) : null}
 
       <div className="mt-3">
         {links.length === 0 ? (
-          <div className="text-sm text-gray-500">Нет источников, нажмите «Добавить источник»</div>
+          <div className="text-sm text-gray-500">Нет источников{canEdit ? ', нажмите «Добавить источник»' : ''}</div>
         ) : (
           <ul className="list-disc pl-6 space-y-1">
             {links
@@ -312,7 +316,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               return (
                 <li key={l.id} className="flex items-center gap-2">
                   <span className="max-w-[48ch] truncate" title={label}>{label}</span>
-                  {status ? (
+                  {canEdit && status ? (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : status==='draft' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'}`}>{status === 'published' ? 'Published' : status==='draft'?'Draft':'Deleted'}</span>
                   ) : null}
                   {canEdit && status!=='deleted' ? (
