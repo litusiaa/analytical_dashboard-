@@ -8,6 +8,15 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   // collect dataSourceIds linked to this dashboard
   const links = await prisma.dashboardDataSourceLink.findMany({ where: { dashboard: slug }, select: { dataSourceId: true } });
   const ids = links.map(l => l.dataSourceId);
+  // publish dashboard->datasource links if link has status column
+  let linkCount = 0;
+  try {
+    const hasLinkStatus: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name='status' LIMIT 1");
+    if (Array.isArray(hasLinkStatus) && hasLinkStatus.length > 0) {
+      const r = await prisma.dashboardDataSourceLink.updateMany({ where: { dashboard: slug, status: 'draft' as any }, data: { status: 'published' as any } });
+      linkCount = r.count;
+    }
+  } catch {}
   // publish widgets of this dashboard
   const w = await prisma.widget.updateMany({ where: { dashboard: slug, status: 'draft' as any }, data: { status: 'published' as any } });
   // publish data sources linked to this dashboard (if status column exists)
@@ -39,7 +48,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     }
   } catch {}
   return NextResponse.json(
-    { ok: true, published: { widgets: w.count, dataSources: dsCount, layouts: layoutsCount } },
+    { ok: true, published: { widgets: w.count, dataSources: dsCount, links: linkCount, layouts: layoutsCount } },
     { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } }
   );
 }
