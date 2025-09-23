@@ -248,32 +248,31 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   {canEdit && status!=='deleted' ? (
                     <button className="ml-auto text-red-600 text-xs" onClick={async () => {
                       if (!confirm('Переместить источник в корзину?')) return;
-                      const res = await fetch(`/api/data-sources/${(l as any).dataSourceId}`, { method: 'DELETE', credentials: 'include' });
+                      const res = await fetch(`/api/dashboards/${slug}/data-sources/${l.id}`, { method: 'DELETE', credentials: 'include' });
                       if (res.status === 409) {
                         const j = await res.json().catch(() => ({}));
                         const titles = (j.widgets || []).map((w: any) => w.title).join(', ');
                         if (confirm(`Источник используется виджетами: ${titles}\nУдалить вместе с виджетами?`)) {
-                          await fetch(`/api/data-sources/${(l as any).dataSourceId}?force=true`, { method: 'DELETE', credentials: 'include' });
+                          await fetch(`/api/dashboards/${slug}/data-sources/${l.id}?force=true`, { method: 'DELETE', credentials: 'include' });
                         } else {
                           return;
                         }
                       }
-                      // оптимистично: помечаем как deleted, чтобы ушёл из вкладки draft/pub
-                      setLinks((prev) => prev.map((x: any) => x.id === l.id ? { ...x, dataSource: { ...(x.dataSource||{}), status: 'deleted' } } : x));
+                      // оптимистично скрываем связь в текущей вкладке
+                      setLinks((prev) => prev.filter((x) => x.id !== l.id));
                       await refresh();
                     }}>Удалить</button>
                   ) : null}
                   {canEdit && status==='deleted' ? (
                     <div className="ml-auto flex items-center gap-2">
                       <button className="text-xs text-blue-600" onClick={async ()=>{
-                        await fetch(`/api/data-sources/${(l as any).dataSourceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore' }), credentials: 'include' });
-                        // оптимистично
-                        setLinks((prev)=>prev.map((x:any)=> x.id===l.id ? { ...x, dataSource: { ...(x.dataSource||{}), status: 'draft' } } : x));
+                        await fetch(`/api/dashboards/${slug}/data-sources/${l.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore' }), credentials: 'include' });
+                        setLinks((prev)=>prev.map((x:any)=> x.id===l.id ? { ...x, status: 'draft' } : x));
                         await refresh();
                       }}>Восстановить</button>
                       <button className="text-xs text-red-700" onClick={async ()=>{
                         if (!confirm('Удалить источник навсегда? Это действие необратимо.')) return;
-                        await fetch(`/api/data-sources/${(l as any).dataSourceId}?hard=true`, { method: 'DELETE', credentials: 'include' });
+                        await fetch(`/api/dashboards/${slug}/data-sources/${l.id}?hard=true`, { method: 'DELETE', credentials: 'include' });
                         setLinks((prev)=>prev.filter((x)=> x.id !== l.id));
                         await refresh();
                       }}>Удалить навсегда</button>

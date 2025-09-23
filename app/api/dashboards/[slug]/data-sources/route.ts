@@ -23,18 +23,22 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   );
   const hasStatusCol = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'status');
   const hasLastSyncedAt = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'lastSyncedAt');
+  const linkCols = await prisma.$queryRawUnsafe<any[]>(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name IN ('status','deletedAt','deleted_at')"
+  );
+  const hasLinkStatus = Array.isArray(linkCols) && linkCols.some((c: any) => c.column_name === 'status');
 
   if (!canEdit && hasStatusCol) {
     const links = await prisma.dashboardDataSourceLink.findMany({
       where: { dashboard: slug, dataSource: { status: 'published' as any } },
-      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, status: true, ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
+      select: ({ id: true, dataSourceId: true, ...(hasLinkStatus ? { status: true } : {}), dataSource: { select: { id: true, name: true, type: true, status: true, ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } } as any),
       orderBy: { id: 'desc' },
     });
     items = links as any[];
   } else {
     const links = await prisma.dashboardDataSourceLink.findMany({
       where: hasStatusCol ? { dashboard: slug, dataSource: { status: { in: ['draft','published','deleted'] } as any } } as any : { dashboard: slug },
-      select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
+      select: ({ id: true, dataSourceId: true, ...(hasLinkStatus ? { status: true } : {}), dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } } as any),
       orderBy: { id: 'desc' },
     });
     items = links as any[];
