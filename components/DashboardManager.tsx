@@ -206,7 +206,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       }
       const created = await res2.json();
       // Оптимистично добавим линк
-      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets' } }, ...prev]);
+      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets', status: 'draft' } }, ...prev]);
       // Пробуем перезапросить список; если неуспех — оставляем оптимистичный
       try {
         const resL = await fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store' });
@@ -278,8 +278,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 const dsStatus = (l as any).dataSource?.status as string | undefined;
                 const linkStatus = (l as any).status as string | undefined;
                 if (tab==='trash') return linkStatus==='deleted' || dsStatus==='deleted';
-                if (tab==='draft') return (linkStatus!=='deleted') && dsStatus==='draft';
-                return (linkStatus!=='deleted') && (dsStatus==='published' || !dsStatus);
+                if (tab==='draft') return (linkStatus!=='deleted') && (dsStatus==='draft' || dsStatus===undefined);
+                return (linkStatus!=='deleted') && (dsStatus==='published');
               })
               .map((l) => {
               const ds: any = (l as any).dataSource || {};
