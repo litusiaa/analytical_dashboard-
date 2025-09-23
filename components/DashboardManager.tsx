@@ -278,6 +278,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [wSheetTitle, setWSheetTitle] = useState<string>('');
   const [wRange, setWRange] = useState('A1:Z');
   const [wMapping, setWMapping] = useState<{ x?: string; y?: string; category?: string; groupBy?: string; aggregate?: 'sum'|'count'|'avg'|'min'|'max' }>({});
+  const [miniCols, setMiniCols] = useState<{ key: string; type?: string }[]>([]);
+  const [miniRows, setMiniRows] = useState<any[][]>([]);
+  const [miniLoading, setMiniLoading] = useState(false);
   const [secret2, setSecret2] = useState('');
   const [loading2, setLoading2] = useState(false);
   const [err2, setErr2] = useState<string | null>(null);
@@ -483,7 +486,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 <li key={l.id} className="flex items-center gap-2">
                   <span className="max-w-[48ch] truncate" title={label}>{label}</span>
                   {canEdit && status ? (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : status==='draft' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'}`}>{status === 'published' ? 'Published' : status==='draft'?'Draft':'Deleted'}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : status==='draft' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'}`}>{status === 'published' ? 'Опубликован' : status==='draft'?'Черновик':'Удалён'}</span>
                   ) : null}
                   {canEdit && status!=='deleted' ? (
                     <button className="ml-auto text-red-600 text-xs" onClick={async () => {
@@ -692,10 +695,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           </label>
           <div className="text-xs text-gray-600">Тип</div>
           <select className="border rounded px-3 py-2 text-sm w-full" value={wType} onChange={(e)=> setWType(e.target.value as any)}>
-            <option value="table">Table</option>
-            <option value="line">Line</option>
-            <option value="bar">Bar</option>
-            <option value="pie">Pie</option>
+            <option value="table">Таблица</option>
+            <option value="line">Линейный график</option>
+            <option value="bar">Столбчатая диаграмма</option>
+            <option value="pie">Круговая диаграмма</option>
           </select>
           <label className="block text-sm">Источник
             <div className="flex items-center gap-2 mb-1 text-xs">
@@ -771,32 +774,92 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Диапазон (Range)
             <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="A1:Z" />
           </label>
+          {wDataSourceId && wSheetTitle ? (
+            <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="font-medium">Превью данных (5 строк)</div>
+                <button className="underline" onClick={async ()=>{
+                  if (!wDataSourceId || !wSheetTitle) return;
+                  try {
+                    setMiniLoading(true);
+                    const p = await fetch(`/api/data-sources/${wDataSourceId}/preview?sheet=${encodeURIComponent(wSheetTitle)}&range=${encodeURIComponent(wRange||'A1:Z')}`, { cache: 'no-store' });
+                    if (p.ok) setMiniCols(((await p.json()).columns)||[]);
+                    const r = await fetch(`/api/data-sources/${wDataSourceId}/read?sheet=${encodeURIComponent(wSheetTitle)}&range=${encodeURIComponent(wRange||'A1:Z')}&limit=5&offset=0`, { cache: 'no-store' });
+                    const jr = await r.json();
+                    if (r.ok) setMiniRows(jr.rows||[]);
+                  } finally { setMiniLoading(false); }
+                }}>Обновить превью</button>
+              </div>
+              {miniLoading ? <div className="text-gray-500">Загрузка…</div> : (
+                miniCols.length ? (
+                  <div className="overflow-auto">
+                    <table className="min-w-full text-xs table-fixed border-separate border-spacing-0">
+                      <thead className="bg-white sticky top-0 z-10">
+                        <tr>
+                          {miniCols.map((c)=> (<th key={c.key} className="px-2 py-1 text-left border border-gray-200">{c.key}{c.type?` (${c.type})`:''}</th>))}
+                        </tr>
+                      </thead>
+                      <tbody className="[&>tr:nth-child(odd)]:bg-gray-50">
+                        {miniRows.map((r, i)=> (
+                          <tr key={i} className="hover:bg-gray-100">
+                            {miniCols.map((c, ci)=> (
+                              <td key={c.key+ci} className="px-2 py-1 border border-gray-200 align-top break-words">{(r[ci]===null||r[ci]===undefined||String(r[ci])==='')? '—' : String(r[ci])}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div className="text-gray-500">Нажмите «Обновить превью», чтобы увидеть колонки</div>
+              )}
+              <div>
+                <button className="underline" onClick={async ()=>{
+                  if (!wDataSourceId || !wSheetTitle) return;
+                  // Наивная авто-оценка последней строки: читаем максимум 5000 строк и ищем последнюю непустую
+                  const r = await fetch(`/api/data-sources/${wDataSourceId}/read?sheet=${encodeURIComponent(wSheetTitle)}&range=${encodeURIComponent('A1:Z')}&limit=5000&offset=0`, { cache: 'no-store' });
+                  const jr = await r.json();
+                  if (!r.ok) return alert(jr?.error||'Ошибка определения диапазона');
+                  const rows = jr.rows||[];
+                  let last = rows.length;
+                  for (let i=rows.length-1;i>=0;i--){
+                    if (Array.isArray(rows[i]) && rows[i].some((v:any)=> v!==null && v!==undefined && String(v)!=='')) { last = i+1; break; }
+                  }
+                  setWRange(`A1:Z${last+1}`);
+                  alert('Диапазон обновлён');
+                }}>Определить заголовки/диапазон</button>
+              </div>
+            </div>
+          ) : null}
           {wType !== 'table' ? (
             <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
               <div className="font-medium">Поля графика</div>
-              <label className="block">X (категория/дата)
-                <Input value={wMapping.x || ''} onChange={(e)=> setWMapping({ ...wMapping, x: e.target.value })} placeholder="Week" />
+              <label className="block">Ось X (категория/дата)
+                <Input value={wMapping.x || ''} onChange={(e)=> setWMapping({ ...wMapping, x: e.target.value })} placeholder="Неделя" />
+                <div className="text-[11px] text-gray-500 mt-0.5">Выберите категорию или дату для группировки данных</div>
               </label>
               {wType!=='pie' ? (
-                <label className="block">Y (метрика)
-                  <Input value={wMapping.y || ''} onChange={(e)=> setWMapping({ ...wMapping, y: e.target.value })} placeholder="Count" />
+                <label className="block">Ось Y (метрика)
+                  <Input value={wMapping.y || ''} onChange={(e)=> setWMapping({ ...wMapping, y: e.target.value })} placeholder="Количество" />
+                  <div className="text-[11px] text-gray-500 mt-0.5">Выберите числовое поле для отображения на графике</div>
                 </label>
               ) : (
-                <label className="block">Категория (для Pie)
-                  <Input value={wMapping.category || ''} onChange={(e)=> setWMapping({ ...wMapping, category: e.target.value })} placeholder="Category" />
+                <label className="block">Категория (для круговой)
+                  <Input value={wMapping.category || ''} onChange={(e)=> setWMapping({ ...wMapping, category: e.target.value })} placeholder="Категория" />
                 </label>
               )}
-              <label className="block">Group by (серии)
-                <Input value={wMapping.groupBy || ''} onChange={(e)=> setWMapping({ ...wMapping, groupBy: e.target.value })} placeholder="Source" />
+              <label className="block">Серии (Group by)
+                <Input value={wMapping.groupBy || ''} onChange={(e)=> setWMapping({ ...wMapping, groupBy: e.target.value })} placeholder="Источник" />
+                <div className="text-[11px] text-gray-500 mt-0.5">Разделите данные по этому полю (например: Источник = Gmail, Tg)</div>
               </label>
-              <label className="block">Aggregate
+              <label className="block">Агрегация
                 <select className="border rounded px-2 py-1" value={wMapping.aggregate || 'count'} onChange={(e)=> setWMapping({ ...wMapping, aggregate: e.target.value as any })}>
-                  <option value="count">count</option>
-                  <option value="sum">sum</option>
-                  <option value="avg">avg</option>
-                  <option value="min">min</option>
-                  <option value="max">max</option>
+                  <option value="count">Количество</option>
+                  <option value="sum">Сумма</option>
+                  <option value="avg">Среднее</option>
+                  <option value="min">Мин</option>
+                  <option value="max">Макс</option>
                 </select>
+                <div className="text-[11px] text-gray-500 mt-0.5">Выберите метод обработки чисел (сумма, количество и т.д.)</div>
               </label>
             </div>
           ) : null}
