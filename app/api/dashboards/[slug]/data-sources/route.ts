@@ -122,7 +122,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         const hasSnakeL = Array.isArray(linkCols) && linkCols.some((c: any) => c.column_name === 'deleted_at');
         let link = await prisma.dashboardDataSourceLink.findFirst({ where: { dashboard: slug, dataSourceId: dsId } });
         if (!link) {
-          link = await prisma.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: dsId } });
+          link = await prisma.dashboardDataSourceLink.create({ data: hasStatusL ? ({ dashboard: slug, dataSourceId: dsId, status: 'draft' } as any) : ({ dashboard: slug, dataSourceId: dsId }) });
         } else {
           // restore if soft-deleted
           const restoreData: any = {};
@@ -193,7 +193,12 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
             await tx.dataSourceSheet.createMany({ data: normalized });
           }
         }
-        const link = await tx.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: dsId } });
+        // create link with status draft if link has status column
+        const lcols: any[] = (await tx.$queryRawUnsafe(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name IN ('status')"
+        )) as any[];
+        const hasLinkStatus = Array.isArray(lcols) && lcols.some((c: any) => c.column_name === 'status');
+        const link = await tx.dashboardDataSourceLink.create({ data: hasLinkStatus ? ({ dashboard: slug, dataSourceId: dsId, status: 'draft' } as any) : ({ dashboard: slug, dataSourceId: dsId }) });
         // Auto-create a table widget for the first selected sheet, if any
         if (sheets && sheets.length > 0) {
           const first = normalizeSheetInput(sheets[0]);
