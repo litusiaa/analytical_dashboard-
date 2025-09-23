@@ -30,37 +30,56 @@ export async function DELETE(req: Request, { params }: { params: { slug: string;
       await tx.dashboardDataSourceLink.delete({ where: { id: linkId } });
     } else {
       // soft delete link: status/deletedAt handling depending on schema
-      const cols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name IN ('status','deletedAt','deleted_at')");
+      const cols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink'");
       const hasStatus = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'status');
       const hasCamel = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'deletedAt');
-      const data: any = { status: 'deleted' };
-      if (!hasStatus) delete data.status;
-      if (hasCamel) data.deletedAt = new Date(); else (data as any).deleted_at = new Date();
-      await tx.dashboardDataSourceLink.update({ where: { id: linkId }, data });
+      const hasSnake = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'deleted_at');
+      const data: any = {};
+      if (hasStatus) data.status = 'deleted';
+      if (hasCamel) data.deletedAt = new Date();
+      if (hasSnake) (data as any).deleted_at = new Date();
+      if (Object.keys(data).length === 0) {
+        // no soft-delete columns → hard delete the link
+        await tx.dashboardDataSourceLink.delete({ where: { id: linkId } });
+      } else {
+        await tx.dashboardDataSourceLink.update({ where: { id: linkId }, data });
+      }
     }
 
     if (!hard) {
       // cascade soft-delete widgets if forced
       if (widgets.length > 0 && force) {
-        const wcols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name IN ('status','deletedAt','deleted_at')");
+        const wcols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget'");
         const wHasStatus = Array.isArray(wcols) && wcols.some((c: any) => c.column_name === 'status');
         const wHasCamel = Array.isArray(wcols) && wcols.some((c: any) => c.column_name === 'deletedAt');
-        const wData: any = { status: 'deleted' };
-        if (!wHasStatus) delete wData.status;
-        if (wHasCamel) wData.deletedAt = new Date(); else (wData as any).deleted_at = new Date();
-        await tx.widget.updateMany({ where: { dashboard: slug, dataSourceId: dsId }, data: wData });
+        const wHasSnake = Array.isArray(wcols) && wcols.some((c: any) => c.column_name === 'deleted_at');
+        const wData: any = {};
+        if (wHasStatus) wData.status = 'deleted';
+        if (wHasCamel) wData.deletedAt = new Date();
+        if (wHasSnake) (wData as any).deleted_at = new Date();
+        if (Object.keys(wData).length === 0) {
+          await tx.widget.deleteMany({ where: { dashboard: slug, dataSourceId: dsId } });
+        } else {
+          await tx.widget.updateMany({ where: { dashboard: slug, dataSourceId: dsId }, data: wData });
+        }
       }
 
       // if no other links exist for this data source → soft delete the data source itself
       const remaining = await tx.dashboardDataSourceLink.count({ where: { dataSourceId: dsId, ...(hard ? {} : { NOT: { id: linkId } }) } });
       if (remaining === 0) {
-        const dcols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name IN ('status','deletedAt','deleted_at')");
+        const dcols: any[] = await tx.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource'");
         const dHasStatus = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'status');
         const dHasCamel = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'deletedAt');
-        const dData: any = { status: 'deleted' };
-        if (!dHasStatus) delete dData.status;
-        if (dHasCamel) dData.deletedAt = new Date(); else (dData as any).deleted_at = new Date();
-        await tx.dataSource.update({ where: { id: dsId }, data: dData });
+        const dHasSnake = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'deleted_at');
+        const dData: any = {};
+        if (dHasStatus) dData.status = 'deleted';
+        if (dHasCamel) dData.deletedAt = new Date();
+        if (dHasSnake) (dData as any).deleted_at = new Date();
+        if (Object.keys(dData).length === 0) {
+          await tx.dataSource.delete({ where: { id: dsId } });
+        } else {
+          await tx.dataSource.update({ where: { id: dsId }, data: dData });
+        }
       }
     } else {
       // hard delete widgets of this dashboard only if forced hard? leave as is (widgets can remain unlinked)
