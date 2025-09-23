@@ -243,9 +243,17 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               const ds: any = (l as any).dataSource || {};
               const linkStatus: string | undefined = (l as any).status;
               const status: string | undefined = linkStatus==='deleted' ? 'deleted' : ds.status;
+              const titles: string[] = ((l as any).sheets || []).map((s: any) => s.title);
+              const label = (() => {
+                if ((ds.type || '') !== 'google_sheets') return ds.name || 'Источник';
+                if (titles.length === 0) return `Таблица — ${ds.spreadsheetTitle || ds.name || ''}`.trim();
+                if (titles.length === 1) return `Таблица — ${titles[0]}`;
+                if (titles.length === 2) return `Таблица — ${titles[0]}, ${titles[1]}`;
+                return `Таблица — ${titles[0]}, ${titles[1]} (+${titles.length - 2})`;
+              })();
               return (
                 <li key={l.id} className="flex items-center gap-2">
-                  <span>{ds.name || 'Источник'} ({ds.type || '—'})</span>
+                  <span className="max-w-[48ch] truncate" title={label}>{label}</span>
                   {status ? (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'published' ? 'bg-green-100 text-green-700' : status==='draft' ? 'bg-amber-100 text-amber-800' : 'bg-gray-300 text-gray-700'}`}>{status === 'published' ? 'Published' : status==='draft'?'Draft':'Deleted'}</span>
                   ) : null}
@@ -443,9 +451,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               }
             }}>
               <option value="">— выберите источник —</option>
-              {Array.from(new Map(allSources.filter((s:any)=> (showDraftsInWidget ? s.status!=='deleted' : s.status==='published')).sort((a:any,b:any)=> new Date(b.updatedAt||0).getTime() - new Date(a.updatedAt||0).getTime()).map((s:any)=>[s.id,s])).values()).map((s:any) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.type}){s.status==='draft'?' — Draft':''}</option>
-              ))}
+              {Array.from(new Map(allSources.filter((s:any)=> (showDraftsInWidget ? s.status!=='deleted' : s.status==='published')).sort((a:any,b:any)=> new Date(b.updatedAt||0).getTime() - new Date(a.updatedAt||0).getTime()).map((s:any)=>[s.id,s])).values()).map((s:any) => {
+                const link = (links as any[]).find((l:any)=> Number(l.dataSourceId) === Number(s.id));
+                const titles: string[] = (link?.sheets || []).map((x:any)=> x.title);
+                const label = (() => {
+                  if ((s.type||'') !== 'google_sheets') return s.name;
+                  if (titles.length === 0) return `Таблица — ${s.spreadsheetTitle || s.name || ''}`.trim();
+                  if (titles.length === 1) return `Таблица — ${titles[0]}`;
+                  if (titles.length === 2) return `Таблица — ${titles[0]}, ${titles[1]}`;
+                  return `Таблица — ${titles[0]}, ${titles[1]} (+${titles.length - 2})`;
+                })();
+                return (<option key={s.id} value={s.id}>{label}{s.status==='draft'?' — Draft':''}</option>);
+              })}
             </select>
           </label>
           {wDataSourceId && (sourceSheets[wDataSourceId]?.length || 0) > 1 ? (

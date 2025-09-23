@@ -36,24 +36,52 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       select: ({ id: true, dataSourceId: true, ...(hasLinkStatus ? { status: true } : {}), ...(hasLinkDeletedAt ? { deletedAt: true } : {}), ...(hasLinkDeleted_at ? { deleted_at: true } : {}), dataSource: { select: { id: true, name: true, type: true, status: true, ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } } as any),
       orderBy: { id: 'desc' },
     });
-    items = (links as any[]).map((l: any) => {
+    let result = (links as any[]).map((l: any) => {
       if (!hasLinkStatus) {
         if ((hasLinkDeletedAt && l.deletedAt) || (hasLinkDeleted_at && l.deleted_at)) l.status = 'deleted';
       }
       delete l.deletedAt; delete l.deleted_at; return l;
     });
+    // attach sheets if table exists
+    const hasSheetsTbl: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='DataSourceSheet' LIMIT 1");
+    if (Array.isArray(hasSheetsTbl) && hasSheetsTbl.length > 0) {
+      const ids = result.map((x: any) => x.dataSourceId);
+      if (ids.length > 0) {
+        const rows = await prisma.dataSourceSheet.findMany({ where: { dataSourceId: { in: ids } as any }, select: { dataSourceId: true, title: true, range: true } });
+        const map = new Map<number, { title: string; range: string | null }[]>();
+        for (const r of rows as any[]) {
+          const k = Number(r.dataSourceId); const arr = map.get(k) || []; arr.push({ title: r.title, range: r.range }); map.set(k, arr);
+        }
+        result = result.map((x: any) => ({ ...x, sheets: map.get(Number(x.dataSourceId)) || [] }));
+      }
+    }
+    items = result as any[];
   } else {
     const links = await prisma.dashboardDataSourceLink.findMany({
       where: hasStatusCol ? { dashboard: slug, dataSource: { status: { in: ['draft','published','deleted'] } as any } } as any : { dashboard: slug },
       select: ({ id: true, dataSourceId: true, ...(hasLinkStatus ? { status: true } : {}), ...(hasLinkDeletedAt ? { deletedAt: true } : {}), ...(hasLinkDeleted_at ? { deleted_at: true } : {}), dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } } as any),
       orderBy: { id: 'desc' },
     });
-    items = (links as any[]).map((l: any) => {
+    let result = (links as any[]).map((l: any) => {
       if (!hasLinkStatus) {
         if ((hasLinkDeletedAt && l.deletedAt) || (hasLinkDeleted_at && l.deleted_at)) l.status = 'deleted';
       }
       delete l.deletedAt; delete l.deleted_at; return l;
     });
+    // attach sheets if table exists
+    const hasSheetsTbl: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='DataSourceSheet' LIMIT 1");
+    if (Array.isArray(hasSheetsTbl) && hasSheetsTbl.length > 0) {
+      const ids = result.map((x: any) => x.dataSourceId);
+      if (ids.length > 0) {
+        const rows = await prisma.dataSourceSheet.findMany({ where: { dataSourceId: { in: ids } as any }, select: { dataSourceId: true, title: true, range: true } });
+        const map = new Map<number, { title: string; range: string | null }[]>();
+        for (const r of rows as any[]) {
+          const k = Number(r.dataSourceId); const arr = map.get(k) || []; arr.push({ title: r.title, range: r.range }); map.set(k, arr);
+        }
+        result = result.map((x: any) => ({ ...x, sheets: map.get(Number(x.dataSourceId)) || [] }));
+      }
+    }
+    items = result as any[];
   }
   const { serializeJsonSafe } = await import('@/lib/json');
   return NextResponse.json(
