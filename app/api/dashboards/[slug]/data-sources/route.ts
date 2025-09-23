@@ -111,9 +111,46 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       const spreadsheetId = parseSpreadsheetIdFromUrl(spreadsheetUrl);
       if (!spreadsheetId) return NextResponse.json({ message: 'Invalid Google Sheets URL' }, { status: 400 });
 
-      // DUPLICATE GUARD: if a data source with same spreadsheetId is already linked to this dashboard, block
-      const existing = await prisma.dashboardDataSourceLink.findFirst({ where: { dashboard: slug, dataSource: { spreadsheetId } } });
-      if (existing) return NextResponse.json({ code: 'DUPLICATE', message: 'Этот источник уже привязан к дашборду' }, { status: 409 });
+      // Find or create DataSource by spreadsheetId, and ensure link exists (restore if soft-deleted)
+      const dsExisting = await prisma.dataSource.findFirst({ where: { spreadsheetId } });
+      if (dsExisting) {
+        const dsId = typeof dsExisting.id === 'bigint' ? dsExisting.id : BigInt(String(dsExisting.id));
+        // ensure link
+        const linkCols: any[] = await prisma.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink'");
+        const hasStatusL = Array.isArray(linkCols) && linkCols.some((c: any) => c.column_name === 'status');
+        const hasCamelL = Array.isArray(linkCols) && linkCols.some((c: any) => c.column_name === 'deletedAt');
+        const hasSnakeL = Array.isArray(linkCols) && linkCols.some((c: any) => c.column_name === 'deleted_at');
+        let link = await prisma.dashboardDataSourceLink.findFirst({ where: { dashboard: slug, dataSourceId: dsId } });
+        if (!link) {
+          link = await prisma.dashboardDataSourceLink.create({ data: { dashboard: slug, dataSourceId: dsId } });
+        } else {
+          // restore if soft-deleted
+          const restoreData: any = {};
+          if (hasStatusL) restoreData.status = 'draft';
+          if (hasCamelL) restoreData.deletedAt = null;
+          if (hasSnakeL) (restoreData as any).deleted_at = null;
+          if (Object.keys(restoreData).length) {
+            await prisma.dashboardDataSourceLink.update({ where: { id: link.id }, data: restoreData });
+          }
+        }
+
+        // upsert sheets if provided
+        if (sheets?.length) {
+          const hasSheetsTbl: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='DataSourceSheet' LIMIT 1");
+          if (Array.isArray(hasSheetsTbl) && hasSheetsTbl.length > 0) {
+            for (const s of sheets.map(normalizeSheetInput)) {
+              const exists = await prisma.dataSourceSheet.findFirst({ where: { dataSourceId: dsId, title: s.title } });
+              if (!exists) {
+                await prisma.dataSourceSheet.create({ data: { dataSourceId: dsId, title: s.title, range: s.range ?? null } });
+              } else if (s.range && (!exists.range || String(s.range).length > String(exists.range).length)) {
+                await prisma.dataSourceSheet.update({ where: { id: exists.id }, data: { range: s.range } });
+              }
+            }
+          }
+        }
+
+        return NextResponse.json({ id: Number(link!.id), dataSourceId: Number(dsId), name: dsExisting.name }, { status: 201, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+      }
 
       const result = await prisma.$transaction(async (tx) => {
         // Detect if legacy DB without `status` column
@@ -177,7 +214,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       });
       const id = Number(result.link.id);
       const dataSourceId = Number(result.ds.id);
-      return NextResponse.json({ id, dataSourceId, name: result.ds.name }, { status: 201 });
+      return NextResponse.json({ id, dataSourceId, name: result.ds.name }, { status: 201, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
     }
 
     return NextResponse.json({ message: 'Provide dataSourceId or spreadsheetUrl' }, { status: 400 });
