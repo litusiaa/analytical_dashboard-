@@ -31,6 +31,9 @@ export async function PUT(req: Request, { params }: { params: { slug: string; id
     await prisma.widget.update({ where: { id }, data: { status: 'published' as any } as any });
   } else if (body?.action === 'unpublish') {
     await prisma.widget.update({ where: { id }, data: { status: 'draft' as any } as any });
+  } else if (body?.config) {
+    // update config (replace)
+    await prisma.widget.update({ where: { id }, data: { config: body.config as any } as any });
   } else if (body?.status && (body.status === 'published' || body.status === 'draft')) {
     await prisma.widget.update({ where: { id }, data: { status: body.status as any } as any });
   }

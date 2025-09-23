@@ -7,12 +7,13 @@ import { Spinner } from '@/components/Spinner';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
-function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000 }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number }) {
+function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, canEdit = false, slug, widget }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number; canEdit?: boolean; slug: string; widget?: any }) {
   const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][]; total?: number }>({ loading: true });
   const [page, setPage] = React.useState(0);
   const [preview, setPreview] = React.useState<{ columns: { key: string; type?: string }[]; distinct: Record<string, any[]> } | null>(null);
   const [activeFilterCol, setActiveFilterCol] = React.useState<string>('');
   const [selectedValues, setSelectedValues] = React.useState<Record<string, Set<string>>>(() => ({}));
+  const presets = (widget?.config?.filterPresets || []) as Array<{ id: string; name: string; filters: any; isDefault?: boolean }>;
 
   function encodeFilters(): string | undefined {
     const items: any[] = [];
@@ -45,6 +46,19 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000 }
     (async () => {
       try {
         setState((s) => ({ ...s, loading: true, error: undefined }));
+        // Apply default preset once (only on mount for this widget)
+        if (presets && presets.length > 0) {
+          const def = presets.find((p) => p.isDefault) || null;
+          if (def && def.filters && def.filters.items) {
+            const next: Record<string, Set<string>> = {};
+            for (const it of def.filters.items) {
+              if (it && it.col && Array.isArray(it.value)) {
+                next[it.col] = new Set<string>(it.value.map((x: any) => String(x)));
+              }
+            }
+            if (Object.keys(next).length > 0) setSelectedValues(next);
+          }
+        }
         await fetchPage(0);
         if (cancelled) return;
       } catch (e: any) {
@@ -94,6 +108,43 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000 }
             ) : null}
             <button className="ml-auto underline" onClick={async ()=>{ setPage(0); await fetchPage(0); }}>Применить</button>
             <button className="underline" onClick={async ()=>{ setSelectedValues({}); setPage(0); await fetchPage(0); }}>Сбросить</button>
+            {canEdit ? (
+              <>
+                <button className="underline" onClick={async ()=>{
+                  const name = prompt('Название пресета фильтров');
+                  if (!name) return;
+                  const items: any[] = [];
+                  Object.entries(selectedValues).forEach(([col, set]) => { if (set.size>0) items.push({ col, op: 'in', value: Array.from(set) }); });
+                  const tree = { op: 'AND', items };
+                  const newPreset = { id: String(Date.now()), name, filters: tree };
+                  const cfg = { ...(widget?.config||{}), filterPresets: [ ...(widget?.config?.filterPresets||[]), newPreset ] };
+                  await fetch(`/api/dashboards/${slug}/widgets/${widget.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: cfg }), credentials: 'include' });
+                  alert('Пресет сохранён');
+                }}>Сохранить как пресет</button>
+                {presets && presets.length>0 ? (
+                  <>
+                    <select className="border rounded px-2 py-1" onChange={async (e)=>{
+                      const pid = e.target.value; if (!pid) return;
+                      const p = presets.find((x)=> String(x.id)===pid); if (!p) return;
+                      const next: Record<string, Set<string>> = {};
+                      (p.filters?.items||[]).forEach((it: any)=>{ if (it.col && Array.isArray(it.value)) next[it.col]= new Set(it.value.map((x:any)=> String(x))); });
+                      setSelectedValues(next); setPage(0); await fetchPage(0);
+                    }}>
+                      <option value="">— пресеты —</option>
+                      {presets.map((p)=> (<option key={p.id} value={p.id}>{p.name}{p.isDefault?' (по умолчанию)':''}</option>))}
+                    </select>
+                    <button className="underline" onClick={async ()=>{
+                      const pid = prompt('ID пресета, сделать по умолчанию');
+                      if (!pid) return;
+                      const nextList = (widget?.config?.filterPresets||[]).map((p:any)=> ({ ...p, isDefault: String(p.id)===pid }));
+                      const cfg = { ...(widget?.config||{}), filterPresets: nextList };
+                      await fetch(`/api/dashboards/${slug}/widgets/${widget.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: cfg }), credentials: 'include' });
+                      alert('Пресет установлен по умолчанию');
+                    }}>Сделать пресет по умолчанию</button>
+                  </>
+                ) : null}
+              </>
+            ) : null}
           </div>
           {/* Chips */}
           <div className="mt-2 flex gap-2 flex-wrap">
@@ -522,7 +573,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   ) : null}
                 </div>
                 {w.type === 'table' ? (
-                  <TableWidgetPreview dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
+                  <TableWidgetPreview canEdit={canEdit} slug={slug} widget={w} dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
                 ) : null}
               </li>
             ))}
