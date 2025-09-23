@@ -129,6 +129,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     for (const li of linksArr) {
       const ds: any = (li as any).dataSource;
       if (!ds) continue;
+      const linkStatus: string | undefined = (li as any).status;
+      if (linkStatus === 'deleted') continue; // не берём удалённые связи в источники для модалки
       unique.set(Number(ds.id), ds);
     }
     setAllSources(Array.from(unique.values()).filter((ds: any) => ds.status !== 'deleted'));
@@ -231,14 +233,16 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <ul className="list-disc pl-6 space-y-1">
             {links
               .filter((l) => {
-                const st = (l as any).dataSource?.status;
-                if (tab==='trash') return st==='deleted';
-                if (tab==='draft') return st==='draft';
-                return st==='published' || !st;
+                const dsStatus = (l as any).dataSource?.status as string | undefined;
+                const linkStatus = (l as any).status as string | undefined;
+                if (tab==='trash') return linkStatus==='deleted' || dsStatus==='deleted';
+                if (tab==='draft') return (linkStatus!=='deleted') && dsStatus==='draft';
+                return (linkStatus!=='deleted') && (dsStatus==='published' || !dsStatus);
               })
               .map((l) => {
               const ds: any = (l as any).dataSource || {};
-              const status: string | undefined = ds.status;
+              const linkStatus: string | undefined = (l as any).status;
+              const status: string | undefined = linkStatus==='deleted' ? 'deleted' : ds.status;
               return (
                 <li key={l.id} className="flex items-center gap-2">
                   <span>{ds.name || 'Источник'} ({ds.type || '—'})</span>
