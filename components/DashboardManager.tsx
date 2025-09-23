@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/Input';
 import { Spinner } from '@/components/Spinner';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
@@ -575,6 +576,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 </div>
                 {w.type === 'table' ? (
                   <TableWidgetPreview canEdit={canEdit} slug={slug} widget={w} dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
+                ) : (w.type==='line' || w.type==='bar' || w.type==='pie') ? (
+                  <ChartWidgetPreview type={w.type as any} config={(w as any).config} />
                 ) : null}
               </li>
             ))}
@@ -784,4 +787,76 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   );
 }
 
+function ChartWidgetPreview({ type, config }: { type: 'line'|'bar'|'pie'; config: any }) {
+  const [data, setData] = React.useState<any[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const dsId = config?.dataSourceId; const sheet = config?.sheetTitle; const range = config?.range || 'A1:Z';
+        if (!dsId || !sheet) return;
+        const res = await fetch(`/api/data-sources/${dsId}/read?sheet=${encodeURIComponent(sheet)}&range=${encodeURIComponent(range)}&limit=5000&offset=0`, { cache: 'no-store' });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error || 'Ошибка');
+        const rows = j.rows || [];
+        const columns = (j.columns || []).map((x: any) => String(x));
+        const idx = (k: string) => Math.max(0, columns.indexOf(k));
+        const xKey = config?.mapping?.x; const yKey = config?.mapping?.y; const catKey = config?.mapping?.category; const groupBy = config?.mapping?.groupBy; const agg = config?.mapping?.aggregate || 'count';
+        const xi = xKey ? idx(xKey) : 0; const yi = yKey ? idx(yKey) : 1; const ci = catKey ? idx(catKey) : 0; const gi = groupBy ? idx(groupBy) : -1;
+        const map = new Map<string, number>();
+        const list: any[] = [];
+        for (const r of rows) {
+          const x = String(r[xi] ?? '');
+          const g = gi >= 0 ? String(r[gi] ?? '') : '';
+          const key = x + '||' + g;
+          const val = Number(String(r[yi] ?? '0').replace(',', '.')) || 0;
+          if (!map.has(key)) map.set(key, agg==='count' ? 1 : val);
+          else map.set(key, agg==='count' ? (map.get(key)! + 1) : (agg==='sum' ? map.get(key)! + val : map.get(key)!));
+        }
+        // materialize
+        const groups = new Map<string, any>();
+        for (const [key, v] of map.entries()) {
+          const [x, g] = key.split('||');
+          const obj = groups.get(x) || { x };
+          const seriesName = g || (yKey || 'value');
+          obj[seriesName] = v;
+          groups.set(x, obj);
+        }
+        setData(Array.from(groups.values()));
+      } catch (e: any) {
+        setError(e.message || 'Ошибка');
+      }
+    })();
+  }, [type, JSON.stringify(config || {})]);
+  if (error) return <div className="text-xs text-red-600">{error}</div>;
+  if (!data.length) return <div className="text-xs text-gray-500">Нет данных</div>;
+  const seriesKeys = Object.keys(data[0]).filter((k) => k !== 'x');
+  const colors = ['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed'];
+  return (
+    <div style={{ width: '100%', height: 260 }}>
+      <ResponsiveContainer>
+        {type === 'line' ? (
+          <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="x" /><YAxis /><Tooltip /><Legend />
+            {seriesKeys.map((k, i) => (<Line key={k} type="monotone" dataKey={k} stroke={colors[i%colors.length]} dot={false} />))}
+          </LineChart>
+        ) : type === 'bar' ? (
+          <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="x" /><YAxis /><Tooltip /><Legend />
+            {seriesKeys.map((k, i) => (<Bar key={k} dataKey={k} fill={colors[i%colors.length]} />))}
+          </BarChart>
+        ) : (
+          <PieChart>
+            <Tooltip /><Legend />
+            <Pie data={seriesKeys.length? data.map(d=> ({ name: d.x, value: Number(d[seriesKeys[0]]||0) })) : []} dataKey="value" nameKey="name" outerRadius={80} label>
+              {data.map((_, i) => (<Cell key={i} fill={colors[i%colors.length]} />))}
+            </Pie>
+          </PieChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
