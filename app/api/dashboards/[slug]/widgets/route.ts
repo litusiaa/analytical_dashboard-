@@ -1,19 +1,13 @@
+// @ts-nocheck
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAuthorizedEdit, unauthorizedJson } from '@/lib/authz';
 
 const SLUGS = new Set(['pm','ds','csm','finance','partner','sales']);
 
-function authorized(req: Request): boolean {
-  const bearer = req.headers.get('authorization');
-  const token = bearer?.startsWith('Bearer ') ? bearer.substring('Bearer '.length) : undefined;
-  const secret = token || new URL(req.url).searchParams.get('secret');
-  return Boolean(secret && process.env.SYNC_SECRET && secret === process.env.SYNC_SECRET);
-}
-
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const slug = params.slug;
-  if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
+  if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   const cookie = req.headers.get('cookie') || '';
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
   // Filter by status only if column exists in DB
@@ -25,14 +19,17 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     if (!canEdit) {
       where.status = 'published';
     } else {
-      where.status = { in: ['draft','published'] } as any;
+      where.status = { in: ['draft','published','deleted'] } as any;
     }
   }
   const select: any = { id: true, type: true, title: true, config: true, createdAt: true, updatedAt: true };
   if (Array.isArray(hasStatus) && hasStatus.length > 0) select.status = true;
   const items = await prisma.widget.findMany({ where, orderBy: { order: 'asc' }, select });
   const { serializeJsonSafe } = await import('@/lib/json');
-  return NextResponse.json({ items: serializeJsonSafe(items) }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    { items: serializeJsonSafe(items) },
+    { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } }
+  );
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {

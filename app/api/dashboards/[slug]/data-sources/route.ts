@@ -13,7 +13,7 @@ function authorized(req: Request): boolean {
 
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const slug = params.slug;
-  if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
+  if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   const cookie = req.headers.get('cookie') || '';
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
   // If we are in view mode and DB has status column, filter by published
@@ -33,14 +33,17 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     items = links as any[];
   } else {
     const links = await prisma.dashboardDataSourceLink.findMany({
-      where: hasStatusCol ? { dashboard: slug, dataSource: { status: { in: ['draft','published'] } as any } } as any : { dashboard: slug },
+      where: hasStatusCol ? { dashboard: slug, dataSource: { status: { in: ['draft','published','deleted'] } as any } } as any : { dashboard: slug },
       select: { id: true, dataSourceId: true, dataSource: { select: { id: true, name: true, type: true, ...(hasStatusCol ? { status: true } : {}), ...(hasLastSyncedAt ? { lastSyncedAt: true } : {}) } as any } },
       orderBy: { id: 'desc' },
     });
     items = links as any[];
   }
   const { serializeJsonSafe } = await import('@/lib/json');
-  return NextResponse.json({ items: serializeJsonSafe(items) }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    { items: serializeJsonSafe(items) },
+    { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } }
+  );
 }
 
 export async function POST(req: Request, { params }: { params: { slug: string } }) {
@@ -76,8 +79,10 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         const hasStatus = Array.isArray(col) && col.length > 0;
 
         let ds: any;
+        const firstSheetTitle = (sheets && sheets.length > 0) ? normalizeSheetInput(sheets[0]).title : undefined;
+        const autoName = name && String(name).trim().length > 0 ? name : (firstSheetTitle ? `Google Sheet — ${firstSheetTitle}` : 'Google Sheet');
         if (hasStatus) {
-          ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: name || 'Google Sheet', spreadsheetId, status: 'draft' } });
+          ds = await tx.dataSource.create({ data: { type: 'google_sheets', name: autoName, spreadsheetId, status: 'draft' } });
         } else {
           const cols: any[] = (await tx.$queryRawUnsafe(
             "SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'DataSource'"
@@ -90,7 +95,7 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
           const rows: any[] = (await tx.$queryRawUnsafe(
             sql,
             'google_sheets',
-            name || 'Google Sheet',
+            autoName,
             spreadsheetId,
           )) as any[];
           const row = rows?.[0] ?? rows;

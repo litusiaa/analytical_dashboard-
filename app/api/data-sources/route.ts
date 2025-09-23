@@ -13,19 +13,20 @@ export async function GET(req: Request) {
   try {
     const cookie = req.headers.get('cookie') || '';
     const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
+    // include deleted only for edit mode so UI can build Trash and widget modal can exclude them
     const where: any = canEdit ? {} : { status: 'published' };
     // Select only safe columns to tolerate legacy DB missing newer columns
     const list = await prisma.dataSource.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, type: true, name: true, spreadsheetId: true, createdAt: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, type: true, name: true, spreadsheetId: true, createdAt: true, updatedAt: true, status: true },
     });
     const { serializeJsonSafe } = await import('@/lib/json');
-    return NextResponse.json({ items: serializeJsonSafe(list) });
+    return NextResponse.json({ items: serializeJsonSafe(list) }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   } catch (e: any) {
     const msg = String(e?.message || e);
     const details = e?.code ? { code: e.code } : undefined;
-    return NextResponse.json({ error: msg, details }, { status: 500 });
+    return NextResponse.json({ error: msg, details }, { status: 500, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   }
 }
 
@@ -50,6 +51,6 @@ export async function POST(req: Request) {
   const item = await prisma.dataSource.create({
     data: { type, name, description: description ?? null, spreadsheetId: spreadsheetId ?? null, defaultRange: defaultRange ?? null },
   });
-  return NextResponse.json({ id: item.id });
+  return NextResponse.json({ id: item.id }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
 }
 

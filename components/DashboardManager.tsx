@@ -68,6 +68,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
   const [tab, setTab] = useState<'pub'|'draft'|'trash'>('pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
+  const [showDraftsInWidget, setShowDraftsInWidget] = useState(false);
+  const [sourceSheets, setSourceSheets] = useState<Record<number, { title: string; range?: string }[]>>({});
 
   // Modals
   const [openAddSource, setOpenAddSource] = useState(false);
@@ -115,14 +117,21 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [err2, setErr2] = useState<string | null>(null);
 
   async function refresh() {
-    const [l, w, s] = await Promise.all([
+    const [l, w] = await Promise.all([
       fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
       fetch(`/api/dashboards/${slug}/widgets?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
-      fetch(`/api/data-sources?ts=${Date.now()}`, { cache: 'no-store', credentials: 'include' }).then(r => r.json()).catch(() => ({ items: [] })),
     ]);
-    setLinks(l.items || []);
+    const linksArr = l.items || [];
+    setLinks(linksArr);
     setWidgets(w.items || []);
-    setAllSources(s.items || []);
+    // build unique sources from links for this dashboard only
+    const unique = new Map<number, any>();
+    for (const li of linksArr) {
+      const ds: any = (li as any).dataSource;
+      if (!ds) continue;
+      unique.set(Number(ds.id), ds);
+    }
+    setAllSources(Array.from(unique.values()).filter((ds: any) => ds.status !== 'deleted'));
   }
 
   useEffect(() => {
@@ -249,9 +258,26 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                           return;
                         }
                       }
-                      setLinks((prev) => prev.filter((x) => x.id !== l.id));
+                      // оптимистично: помечаем как deleted, чтобы ушёл из вкладки draft/pub
+                      setLinks((prev) => prev.map((x: any) => x.id === l.id ? { ...x, dataSource: { ...(x.dataSource||{}), status: 'deleted' } } : x));
                       await refresh();
                     }}>Удалить</button>
+                  ) : null}
+                  {canEdit && status==='deleted' ? (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button className="text-xs text-blue-600" onClick={async ()=>{
+                        await fetch(`/api/data-sources/${(l as any).dataSourceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore' }), credentials: 'include' });
+                        // оптимистично
+                        setLinks((prev)=>prev.map((x:any)=> x.id===l.id ? { ...x, dataSource: { ...(x.dataSource||{}), status: 'draft' } } : x));
+                        await refresh();
+                      }}>Восстановить</button>
+                      <button className="text-xs text-red-700" onClick={async ()=>{
+                        if (!confirm('Удалить источник навсегда? Это действие необратимо.')) return;
+                        await fetch(`/api/data-sources/${(l as any).dataSourceId}?hard=true`, { method: 'DELETE', credentials: 'include' });
+                        setLinks((prev)=>prev.filter((x)=> x.id !== l.id));
+                        await refresh();
+                      }}>Удалить навсегда</button>
+                    </div>
                   ) : null}
                 </li>
               );
@@ -281,9 +307,24 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     <button className="text-red-600 text-xs" onClick={async () => {
                       if (!confirm('Переместить виджет в корзину?')) return;
                       await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
-                      setWidgets((prev) => prev.filter((x) => x.id !== w.id));
+                      setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
                       await refresh();
                     }}>Удалить</button>
+                  ) : null}
+                  {canEdit && (w as any).status==='deleted' ? (
+                    <div className="flex items-center gap-2">
+                      <button className="text-xs text-blue-600" onClick={async ()=>{
+                        await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore' }), credentials: 'include' });
+                        setWidgets((prev)=>prev.map((x:any)=> x.id===w.id ? { ...x, status: 'draft' } : x));
+                        await refresh();
+                      }}>Восстановить</button>
+                      <button className="text-xs text-red-700" onClick={async ()=>{
+                        if (!confirm('Удалить виджет навсегда?')) return;
+                        await fetch(`/api/dashboards/${slug}/widgets/${w.id}?hard=true`, { method: 'DELETE', credentials: 'include' });
+                        setWidgets((prev)=>prev.filter((x)=> x.id !== w.id));
+                        await refresh();
+                      }}>Удалить навсегда</button>
+                    </div>
                   ) : null}
                 </div>
                 {w.type === 'table' ? (
@@ -377,13 +418,45 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           </label>
           <div className="text-xs text-gray-600">Тип: Table</div>
           <label className="block text-sm">Источник
-            <select className="border rounded px-3 py-2 text-sm w-full" value={wDataSourceId ?? ''} onChange={(e) => setWDataSourceId(e.target.value ? Number(e.target.value) : undefined)}>
+            <div className="flex items-center gap-2 mb-1 text-xs">
+              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={showDraftsInWidget} onChange={(e)=>setShowDraftsInWidget(e.target.checked)} /> Показывать черновики</label>
+            </div>
+            <select className="border rounded px-3 py-2 text-sm w-full" value={wDataSourceId ?? ''} onChange={async (e) => {
+              const id = e.target.value ? Number(e.target.value) : undefined;
+              setWDataSourceId(id);
+              if (id) {
+                try {
+                  const res = await fetch(`/api/data-sources/${id}`, { cache: 'no-store', credentials: 'include' });
+                  if (res.ok) {
+                    const j = await res.json();
+                    const arr = (j.sheets || []) as { title: string; range?: string }[];
+                    setSourceSheets((prev)=>({ ...prev, [id]: arr }));
+                    if (arr.length === 1) {
+                      setWSheetTitle(arr[0].title);
+                      setWRange(arr[0].range || 'A1:Z');
+                    }
+                  }
+                } catch {}
+              }
+            }}>
               <option value="">— выберите источник —</option>
-              {allSources.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.type})</option>
+              {Array.from(new Map(allSources.filter((s:any)=> (showDraftsInWidget ? s.status!=='deleted' : s.status==='published')).sort((a:any,b:any)=> new Date(b.updatedAt||0).getTime() - new Date(a.updatedAt||0).getTime()).map((s:any)=>[s.id,s])).values()).map((s:any) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.type}){s.status==='draft'?' — Draft':''}</option>
               ))}
             </select>
           </label>
+          {wDataSourceId && (sourceSheets[wDataSourceId]?.length || 0) > 1 ? (
+            <label className="block text-sm">Лист
+              <select className="border rounded px-3 py-2 text-sm w-full" value={wSheetTitle} onChange={(e)=>{
+                const t = e.target.value; setWSheetTitle(t);
+                const sheet = (sourceSheets[wDataSourceId!]||[]).find(s=>s.title===t);
+                if (sheet) setWRange(sheet.range || 'A1:Z');
+              }}>
+                <option value="">— выберите лист —</option>
+                {(sourceSheets[wDataSourceId]||[]).map(s => (<option key={s.title} value={s.title}>{s.title}</option>))}
+              </select>
+            </label>
+          ) : null}
           <label className="block text-sm">Sheet title
             <Input value={wSheetTitle} onChange={(e) => setWSheetTitle(e.target.value)} placeholder="Лист1" />
           </label>
