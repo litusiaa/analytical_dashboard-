@@ -11,10 +11,20 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
   // publish dashboard->datasource links if link has status column
   let linkCount = 0;
   try {
-    const hasLinkStatus: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name='status' LIMIT 1");
-    if (Array.isArray(hasLinkStatus) && hasLinkStatus.length > 0) {
-      const r = await prisma.dashboardDataSourceLink.updateMany({ where: { dashboard: slug, status: 'draft' as any }, data: { status: 'published' as any } });
-      linkCount = r.count;
+    const hasCamelTable: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='DashboardDataSourceLink' LIMIT 1");
+    const hasSnakeTable: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='dashboard_data_source_link' LIMIT 1");
+    if (Array.isArray(hasCamelTable) && hasCamelTable.length > 0) {
+      const hasLinkStatus: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name='status' LIMIT 1");
+      if (Array.isArray(hasLinkStatus) && hasLinkStatus.length > 0) {
+        const c = await prisma.$executeRawUnsafe(`UPDATE "DashboardDataSourceLink" SET "status"='published' WHERE "dashboard"=$1 AND "status"='draft'`, slug as any);
+        linkCount = typeof c === 'number' ? c : 0;
+      }
+    } else if (Array.isArray(hasSnakeTable) && hasSnakeTable.length > 0) {
+      const hasLinkStatus: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='dashboard_data_source_link' AND column_name='status' LIMIT 1");
+      if (Array.isArray(hasLinkStatus) && hasLinkStatus.length > 0) {
+        const c = await prisma.$executeRawUnsafe(`UPDATE "dashboard_data_source_link" SET status='published' WHERE dashboard=$1 AND status='draft'`, slug as any);
+        linkCount = typeof c === 'number' ? c : 0;
+      }
     }
   } catch {}
   // publish widgets of this dashboard
