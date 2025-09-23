@@ -512,23 +512,24 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               })}
             </select>
           </label>
-          {wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 1 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 1) ? (
+          {wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 0 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 0) ? (
             <label className="block text-sm">Лист
               <select className="border rounded px-3 py-2 text-sm w-full" value={wSheetTitle} onChange={(e)=>{
                 const t = e.target.value; setWSheetTitle(t);
-                const merged = [
-                  ...(((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[]),
-                  ...((sourceSheets[wDataSourceId!]||[]))
-                ] as { title: string; range?: string }[];
+                const merged = (() => {
+                  const fromLink = ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[];
+                  const fromFetch = (sourceSheets[wDataSourceId!]||[]);
+                  if (fromFetch.length) return [...fromLink, ...fromFetch];
+                  return fromLink;
+                })() as { title: string; range?: string }[];
                 const candidates = merged.filter(s=>s.title===t).map(s=>s.range);
                 setWRange(chooseMaxRange(candidates.length? candidates : [merged.find(s=>s.title===t)?.range]));
               }}>
                 <option value="">— выберите лист —</option>
                 {(() => {
-                  const arr = [
-                    ...(((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[]),
-                    ...((sourceSheets[wDataSourceId!]||[]))
-                  ] as { title: string; range?: string }[];
+                  const fromLink = ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[];
+                  const fromFetch = (sourceSheets[wDataSourceId!]||[]);
+                  const arr = (fromFetch.length ? [...fromLink, ...fromFetch] : fromLink) as { title: string; range?: string }[];
                   const seen = new Set<string>();
                   return arr.filter(s=> {
                     if (seen.has(s.title)) return false; seen.add(s.title); return true;
