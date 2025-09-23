@@ -136,6 +136,48 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     setAllSources(Array.from(unique.values()).filter((ds: any) => ds.status !== 'deleted'));
   }
 
+  function lettersToIndex(letters: string): number {
+    let idx = 0;
+    for (let i = 0; i < letters.length; i++) {
+      const ch = letters.charCodeAt(i) - 64; // 'A' => 1
+      idx = idx * 26 + ch;
+    }
+    return idx; // 1-based
+  }
+
+  function normalizeRange(r?: string): { colEnd?: number; rowEnd?: number } {
+    if (!r) return {};
+    const m = r.match(/^[A-Za-z]+\d*:([A-Za-z]+)(\d+)?$/);
+    if (!m) return {};
+    const colEnd = lettersToIndex(m[1].toUpperCase());
+    const rowEnd = m[2] ? Number(m[2]) : undefined;
+    return { colEnd, rowEnd };
+  }
+
+  function chooseMaxRange(ranges: (string | undefined)[]): string {
+    let bestCol = 0;
+    let bestRow = 0;
+    for (const r of ranges) {
+      const { colEnd, rowEnd } = normalizeRange(r);
+      if ((colEnd || 0) > bestCol) bestCol = colEnd || 0;
+      if ((rowEnd || 0) > bestRow) bestRow = rowEnd || 0;
+    }
+    // map back to letters (A=1)
+    function indexToLetters(index: number): string {
+      if (index <= 0) return 'Z';
+      let s = '';
+      let n = index;
+      while (n > 0) {
+        const rem = (n - 1) % 26;
+        s = String.fromCharCode(65 + rem) + s;
+        n = Math.floor((n - 1) / 26);
+      }
+      return s;
+    }
+    const colL = indexToLetters(bestCol || 26);
+    return `A1:${colL}${bestRow ? bestRow : ''}`;
+  }
+
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -442,9 +484,14 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     const j = await res.json();
                     const arr = (j.sheets || []) as { title: string; range?: string }[];
                     setSourceSheets((prev)=>({ ...prev, [id]: arr }));
-                    if (arr.length === 1) {
-                      setWSheetTitle(arr[0].title);
-                      setWRange(arr[0].range || 'A1:Z');
+                    const link = (links as any[]).find((l:any)=> Number(l.dataSourceId) === Number(id));
+                    const fromLink = (link?.sheets || []) as { title: string; range?: string }[];
+                    const sheetsList = (fromLink.length ? fromLink : arr);
+                    if (sheetsList.length === 1) {
+                      const t = sheetsList[0].title;
+                      setWSheetTitle(t);
+                      const sameTitleRanges = sheetsList.filter(s=>s.title===t).map(s=>s.range);
+                      setWRange(chooseMaxRange(sameTitleRanges.length? sameTitleRanges : [sheetsList[0].range]));
                     }
                   }
                 } catch {}
@@ -465,15 +512,28 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               })}
             </select>
           </label>
-          {wDataSourceId && (sourceSheets[wDataSourceId]?.length || 0) > 1 ? (
+          {wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 1 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 1) ? (
             <label className="block text-sm">Лист
               <select className="border rounded px-3 py-2 text-sm w-full" value={wSheetTitle} onChange={(e)=>{
                 const t = e.target.value; setWSheetTitle(t);
-                const sheet = (sourceSheets[wDataSourceId!]||[]).find(s=>s.title===t);
-                if (sheet) setWRange(sheet.range || 'A1:Z');
+                const merged = [
+                  ...(((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[]),
+                  ...((sourceSheets[wDataSourceId!]||[]))
+                ] as { title: string; range?: string }[];
+                const candidates = merged.filter(s=>s.title===t).map(s=>s.range);
+                setWRange(chooseMaxRange(candidates.length? candidates : [merged.find(s=>s.title===t)?.range]));
               }}>
                 <option value="">— выберите лист —</option>
-                {(sourceSheets[wDataSourceId]||[]).map(s => (<option key={s.title} value={s.title}>{s.title}</option>))}
+                {(() => {
+                  const arr = [
+                    ...(((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets)||[]),
+                    ...((sourceSheets[wDataSourceId!]||[]))
+                  ] as { title: string; range?: string }[];
+                  const seen = new Set<string>();
+                  return arr.filter(s=> {
+                    if (seen.has(s.title)) return false; seen.add(s.title); return true;
+                  }).map(s => (<option key={s.title} value={s.title}>{s.title}</option>));
+                })()}
               </select>
             </label>
           ) : null}
