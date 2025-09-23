@@ -134,6 +134,20 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
           }
         }
 
+        // If DataSource has status column, ensure draft (in case it was published/deleted earlier)
+        const dcols: any[] = await prisma.$queryRawUnsafe(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DataSource' AND column_name IN ('status','deletedAt','deleted_at')"
+        );
+        const hasDsStatus = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'status');
+        const hasDsCamel = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'deletedAt');
+        const hasDsSnake = Array.isArray(dcols) && dcols.some((c: any) => c.column_name === 'deleted_at');
+        if (hasDsStatus) {
+          const dsUpdate: any = { status: 'draft' };
+          if (hasDsCamel) dsUpdate.deletedAt = null;
+          if (hasDsSnake) (dsUpdate as any).deleted_at = null;
+          await prisma.dataSource.update({ where: { id: dsId }, data: dsUpdate });
+        }
+
         // upsert sheets if provided
         if (sheets?.length) {
           const hasSheetsTbl: any[] = await prisma.$queryRawUnsafe("SELECT 1 AS ok FROM information_schema.tables WHERE table_schema='public' AND table_name='DataSourceSheet' LIMIT 1");
