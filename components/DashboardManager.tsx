@@ -183,6 +183,19 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
+  // When opening the widget modal, ensure we have up-to-date sources and prefer showing drafts if no published exist
+  useEffect(() => {
+    if (openAddWidget) {
+      (async () => {
+        await refresh();
+        const hasPublished = allSources.some((s: any) => s.status === 'published');
+        const hasDrafts = allSources.some((s: any) => s.status === 'draft' || s.status === undefined);
+        if (!hasPublished && hasDrafts) setShowDraftsInWidget(true);
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAddWidget]);
+
   async function handleAddSource() {
     setLoading1(true);
     setErr1(null);
@@ -223,6 +236,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       } catch {}
       setOpenAddSource(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({});
+      // Make newly added draft immediately available in widget modal without reload
+      setShowDraftsInWidget(true);
     } catch (e: any) {
       setErr1(e.message || 'Ошибка');
     } finally {
