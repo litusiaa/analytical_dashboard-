@@ -120,3 +120,27 @@ export async function PATCH(req: Request, { params }: { params: { slug: string; 
   }
 }
 
+export async function PUT(req: Request, { params }: { params: { slug: string; linkId: string } }) {
+  try {
+    if (!canEdit(req)) return NextResponse.json({ error: 'Editing is disabled. Enable Edit dashboard.' }, { status: 401, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+    const linkId = BigInt(params.linkId);
+    const body = await req.json().catch(() => ({}));
+    const action = body?.action as string | undefined;
+    if (action !== 'publish' && action !== 'unpublish') {
+      return NextResponse.json({ message: 'Unsupported action' }, { status: 400, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+    const cols: any[] = await prisma.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name IN ('status')");
+    const hasStatus = Array.isArray(cols) && cols.some((c: any) => c.column_name === 'status');
+    if (!hasStatus) {
+      // If no status column, best-effort no-op success
+      const link = await prisma.dashboardDataSourceLink.findUnique({ where: { id: linkId } });
+      return NextResponse.json({ ok: true, id: Number(linkId), status: null, dataSourceId: link ? Number(link.dataSourceId) : undefined }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+    const nextStatus = action === 'publish' ? 'published' : 'draft';
+    const updated = await prisma.dashboardDataSourceLink.update({ where: { id: linkId }, data: { status: nextStatus as any } as any });
+    return NextResponse.json({ ok: true, id: Number(linkId), status: nextStatus }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message || e) }, { status: 500, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+  }
+}
+

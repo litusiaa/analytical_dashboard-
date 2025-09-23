@@ -31,6 +31,8 @@ export async function PUT(req: Request, { params }: { params: { slug: string; id
     await prisma.widget.update({ where: { id }, data: { status: 'published' as any } as any });
   } else if (body?.action === 'unpublish') {
     await prisma.widget.update({ where: { id }, data: { status: 'draft' as any } as any });
+  } else if (body?.status && (body.status === 'published' || body.status === 'draft')) {
+    await prisma.widget.update({ where: { id }, data: { status: body.status as any } as any });
   }
   const item = await prisma.widget.findUnique({ where: { id } });
   return NextResponse.json(item, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });

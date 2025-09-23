@@ -292,14 +292,15 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               .filter((l) => {
                 const dsStatus = (l as any).dataSource?.status as string | undefined;
                 const linkStatus = (l as any).status as string | undefined;
-                if (tab==='trash') return linkStatus==='deleted' || dsStatus==='deleted';
-                if (tab==='draft') return (linkStatus!=='deleted') && (dsStatus==='draft' || dsStatus===undefined);
-                return (linkStatus!=='deleted') && (dsStatus==='published');
+                const effective = linkStatus==='deleted' ? 'deleted' : (dsStatus ?? linkStatus ?? undefined);
+                if (tab==='trash') return effective==='deleted';
+                if (tab==='draft') return effective===undefined || effective==='draft';
+                return effective==='published';
               })
               .map((l) => {
               const ds: any = (l as any).dataSource || {};
               const linkStatus: string | undefined = (l as any).status;
-              const status: string | undefined = linkStatus==='deleted' ? 'deleted' : ds.status;
+              const status: string | undefined = linkStatus==='deleted' ? 'deleted' : (ds.status ?? linkStatus ?? undefined);
               const titles: string[] = ((l as any).sheets || []).map((s: any) => s.title);
               const label = (() => {
                 if ((ds.type || '') !== 'google_sheets') return ds.name || 'Источник';
@@ -331,6 +332,22 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                       setLinks((prev) => prev.filter((x) => x.id !== l.id));
                       await refresh();
                     }}>Удалить</button>
+                  ) : null}
+                  {canEdit && status!=='deleted' ? (
+                    <>
+                      {status==='draft' ? (
+                        <button className="text-xs text-green-700" onClick={async ()=>{
+                          await fetch(`/api/dashboards/${slug}/data-sources/${l.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish' }), credentials: 'include' });
+                          await refresh();
+                        }}>Опубликовать</button>
+                      ) : status==='published' ? (
+                        <button className="text-xs text-amber-700" onClick={async ()=>{
+                          await fetch(`/api/dashboards/${slug}/data-sources/${l.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpublish' }), credentials: 'include' });
+                          setTab('draft');
+                          await refresh();
+                        }}>В черновик</button>
+                      ) : null}
+                    </>
                   ) : null}
                   {canEdit && status==='deleted' ? (
                     <div className="ml-auto flex items-center gap-2">
@@ -378,6 +395,23 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                       setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
                       await refresh();
                     }}>Удалить</button>
+                  ) : null}
+                  {canEdit && (w as any).status!=='deleted' ? (
+                    <>
+                      {(w as any).status==='draft' ? (
+                        <button className="text-xs text-green-700 ml-2" onClick={async ()=>{
+                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish' }), credentials: 'include' });
+                          await refresh();
+                        }}>Опубликовать</button>
+                      ) : (w as any).status==='published' ? (
+                        <button className="text-xs text-amber-700 ml-2" onClick={async ()=>{
+                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpublish' }), credentials: 'include' });
+                          setWidgets((prev)=>prev.map((x:any)=> x.id===w.id ? { ...x, status: 'draft' } : x));
+                          setTab('draft');
+                          await refresh();
+                        }}>В черновик</button>
+                      ) : null}
+                    </>
                   ) : null}
                   {canEdit && (w as any).status==='deleted' ? (
                     <div className="flex items-center gap-2">
