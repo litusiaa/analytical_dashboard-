@@ -834,30 +834,45 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
             <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
               <div className="font-medium">Поля графика</div>
               <label className="block">Ось X (категория/дата)
-                <Input value={wMapping.x || ''} onChange={(e)=> setWMapping({ ...wMapping, x: e.target.value })} placeholder="Неделя" />
+                <select className="border rounded px-2 py-1 w-full" value={wMapping.x || ''} onChange={(e)=> setWMapping({ ...wMapping, x: e.target.value })}>
+                  <option value="">— выберите колонку —</option>
+                  {miniCols.map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
+                </select>
                 <div className="text-[11px] text-gray-500 mt-0.5">Выберите категорию или дату для группировки данных</div>
               </label>
               {wType!=='pie' ? (
                 <label className="block">Ось Y (метрика)
-                  <Input value={wMapping.y || ''} onChange={(e)=> setWMapping({ ...wMapping, y: e.target.value })} placeholder="Количество" />
+                  <select className="border rounded px-2 py-1 w-full" value={wMapping.y || ''} onChange={(e)=> setWMapping({ ...wMapping, y: e.target.value })}>
+                    <option value="">— выберите числовую колонку —</option>
+                    {miniCols.filter((c)=> (c.type==='number')).map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
+                    <option value="__count">Счётчик строк</option>
+                  </select>
                   <div className="text-[11px] text-gray-500 mt-0.5">Выберите числовое поле для отображения на графике</div>
                 </label>
               ) : (
                 <label className="block">Категория (для круговой)
-                  <Input value={wMapping.category || ''} onChange={(e)=> setWMapping({ ...wMapping, category: e.target.value })} placeholder="Категория" />
+                  <select className="border rounded px-2 py-1 w-full" value={wMapping.category || ''} onChange={(e)=> setWMapping({ ...wMapping, category: e.target.value })}>
+                    <option value="">— выберите колонку —</option>
+                    {miniCols.filter((c)=> (c.type!=='number')).map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
+                  </select>
                 </label>
               )}
               <label className="block">Серии (Group by)
-                <Input value={wMapping.groupBy || ''} onChange={(e)=> setWMapping({ ...wMapping, groupBy: e.target.value })} placeholder="Источник" />
+                <select className="border rounded px-2 py-1 w-full" value={wMapping.groupBy || ''} onChange={(e)=> setWMapping({ ...wMapping, groupBy: e.target.value })}>
+                  <option value="">— без группировки —</option>
+                  {miniCols.filter((c)=> (c.type!=='number')).map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
+                </select>
                 <div className="text-[11px] text-gray-500 mt-0.5">Разделите данные по этому полю (например: Источник = Gmail, Tg)</div>
               </label>
               <label className="block">Агрегация
                 <select className="border rounded px-2 py-1" value={wMapping.aggregate || 'count'} onChange={(e)=> setWMapping({ ...wMapping, aggregate: e.target.value as any })}>
-                  <option value="count">Количество</option>
-                  <option value="sum">Сумма</option>
-                  <option value="avg">Среднее</option>
-                  <option value="min">Мин</option>
-                  <option value="max">Макс</option>
+                  <option value="count">Счётчик строк</option>
+                  {(!wMapping.y || wMapping.y==='__count') ? null : (<>
+                    <option value="sum">Сумма</option>
+                    <option value="avg">Среднее</option>
+                    <option value="min">Мин</option>
+                    <option value="max">Макс</option>
+                  </>)}
                 </select>
                 <div className="text-[11px] text-gray-500 mt-0.5">Выберите метод обработки чисел (сумма, количество и т.д.)</div>
               </label>
@@ -865,7 +880,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           ) : null}
           {/* Admin Secret removed for UI operations */}
           {err2 ? <div className="text-sm text-red-600">{err2}</div> : null}
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 sticky bottom-0 bg-white pt-2">
             <Button variant="secondary" onClick={() => setOpenAddWidget(false)}>Отмена</Button>
             <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId || !wSheetTitle}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
           </div>
