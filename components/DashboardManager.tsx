@@ -11,6 +11,7 @@ type WidgetItem = { id: string | number; title: string; type: string };
 function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, canEdit = false, slug, widget }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number; canEdit?: boolean; slug: string; widget?: any }) {
   const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][]; total?: number }>({ loading: true });
   const [page, setPage] = React.useState(0);
+  const [pageSizeState, setPageSizeState] = React.useState<number>(pageSize);
   const [preview, setPreview] = React.useState<{ columns: { key: string; type?: string }[]; distinct: Record<string, any[]> } | null>(null);
   const [activeFilterCol, setActiveFilterCol] = React.useState<string>('');
   const [selectedValues, setSelectedValues] = React.useState<Record<string, Set<string>>>(() => ({}));
@@ -32,9 +33,10 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, 
   }
 
   async function fetchPage(curPage: number) {
-    const offset = curPage * pageSize;
+    const psize = pageSizeState;
+    const offset = curPage * psize;
     const filters = encodeFilters();
-    const qs = new URLSearchParams({ sheet: sheetTitle, range, limit: String(pageSize), offset: String(offset) });
+    const qs = new URLSearchParams({ sheet: sheetTitle, range, limit: String(psize), offset: String(offset) });
     if (filters) qs.set('filters', filters);
     const res = await fetch(`/api/data-sources/${dataSourceId}/read?${qs.toString()}`, { cache: 'no-store', credentials: 'include' });
     const j = await res.json();
@@ -84,7 +86,14 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, 
   const cols = state.columns || [];
   const rows = state.rows || [];
   const total = state.total ?? rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSizeState)));
+
+  function renderCell(v: any) {
+    const empty = v === null || v === undefined || String(v) === '';
+    if (empty) return <span className="text-gray-400" title="Пусто">—</span>;
+    const s = String(v);
+    return <span title={s} className="whitespace-pre-wrap break-words">{s}</span>;
+  }
 
   return (
     <div className="space-y-2">
@@ -163,23 +172,39 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, 
       {rows.length === 0 ? <div className="text-xs text-gray-500">Пусто</div> : (
         <div className="overflow-auto border rounded">
           <div className="text-[11px] text-gray-600 px-2 py-1 flex items-center justify-between">
-            <div>Rows: {total}</div>
+            <div className="flex items-center gap-3">
+              <div>Rows: {total}</div>
+              <div className="flex items-center gap-1">Строк на странице:
+                <select className="border rounded px-1 py-0.5" value={pageSizeState} onChange={async (e)=>{ const v = e.target.value==='all' ? total : Number(e.target.value); setPageSizeState(v); setPage(0); await fetchPage(0); }}>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value="all">Все</option>
+                </select>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <button className="px-2 py-0.5 border rounded text-xs" disabled={page<=0} onClick={async ()=>{ const np = Math.max(0, page-1); setPage(np); await fetchPage(np); }}>Prev</button>
               <span className="text-gray-500">{page+1}/{totalPages}</span>
               <button className="px-2 py-0.5 border rounded text-xs" disabled={page+1>=totalPages} onClick={async ()=>{ const np = Math.min(totalPages-1, page+1); setPage(np); await fetchPage(np); }}>Next</button>
             </div>
           </div>
-          <table className="min-w-full text-xs">
-            <thead className="bg-gray-50 sticky top-0">
+          <table className="min-w-full text-xs table-fixed border-separate border-spacing-0">
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                {cols.map((c, i) => (<th key={i} className="px-2 py-1 text-left border-b">{String(c)}</th>))}
+                <th className="sticky left-0 z-20 bg-gray-50 px-2 py-1 text-left border border-gray-200">#</th>
+                {cols.map((c, i) => (
+                  <th key={i} className={`px-2 py-1 text-left border border-gray-200 ${i===0?'sticky left-10 z-10 bg-gray-50':''}`}>{String(c)}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={idx} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
-                  {r.map((cell: any, ci: number) => (<td key={ci} className="px-2 py-1 border-b">{String(cell ?? '')}</td>))}
+                <tr key={idx} className={`hover:bg-gray-100 ${idx % 2 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <td className="sticky left-0 z-10 bg-inherit px-2 py-1 border border-gray-200 text-right w-10">{page*pageSizeState + idx + 1}</td>
+                  {r.map((cell: any, ci: number) => (
+                    <td key={ci} className={`px-2 py-1 border border-gray-200 align-top ${ci===0?'sticky left-10 bg-inherit':''}`}>{renderCell(cell)}</td>
+                  ))}
                 </tr>
               ))}
             </tbody>
