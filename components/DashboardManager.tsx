@@ -247,10 +247,11 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   // Add Widget form
   const [wTitle, setWTitle] = useState('Новый виджет');
-  const [wType, setWType] = useState<'table' | 'line' | 'bar'>('table');
+  const [wType, setWType] = useState<'table' | 'line' | 'bar' | 'pie'>('table');
   const [wDataSourceId, setWDataSourceId] = useState<number | undefined>(undefined);
   const [wSheetTitle, setWSheetTitle] = useState<string>('');
   const [wRange, setWRange] = useState('A1:Z');
+  const [wMapping, setWMapping] = useState<{ x?: string; y?: string; category?: string; groupBy?: string; aggregate?: 'sum'|'count'|'avg'|'min'|'max' }>({});
   const [secret2, setSecret2] = useState('');
   const [loading2, setLoading2] = useState(false);
   const [err2, setErr2] = useState<string | null>(null);
@@ -391,7 +392,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       const res = await fetch(`/api/dashboards/${slug}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'table', title: wTitle, dataSourceId: wDataSourceId, sheetTitle: wSheetTitle, range: wRange, options: { pageSize: 50 } }),
+        body: JSON.stringify({ type: wType, title: wTitle, dataSourceId: wDataSourceId, sheetTitle: wSheetTitle, range: wRange, options: { pageSize: 50 }, mapping: wMapping }),
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Не удалось создать виджет');
@@ -399,7 +400,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       setWidgets([{ id: created.id, title: created.title, type: created.type }, ...widgets]);
       await refresh();
       setOpenAddWidget(false);
-      setWTitle('Новый виджет'); setWType('table'); setWRange('A1:Z'); setWSheetTitle(''); setSecret2('');
+      setWTitle('Новый виджет'); setWType('table'); setWRange('A1:Z'); setWSheetTitle(''); setSecret2(''); setWMapping({});
     } catch (e: any) {
       setErr2(e.message || 'Ошибка');
     } finally {
@@ -661,7 +662,13 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Заголовок
             <Input value={wTitle} onChange={(e) => setWTitle(e.target.value)} />
           </label>
-          <div className="text-xs text-gray-600">Тип: Table</div>
+          <div className="text-xs text-gray-600">Тип</div>
+          <select className="border rounded px-3 py-2 text-sm w-full" value={wType} onChange={(e)=> setWType(e.target.value as any)}>
+            <option value="table">Table</option>
+            <option value="line">Line</option>
+            <option value="bar">Bar</option>
+            <option value="pie">Pie</option>
+          </select>
           <label className="block text-sm">Источник
             <div className="flex items-center gap-2 mb-1 text-xs">
               <label className="inline-flex items-center gap-1"><input type="checkbox" checked={showDraftsInWidget} onChange={(e)=>setShowDraftsInWidget(e.target.checked)} /> Показывать черновики</label>
@@ -736,6 +743,35 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Диапазон (Range)
             <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="A1:Z" />
           </label>
+          {wType !== 'table' ? (
+            <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
+              <div className="font-medium">Поля графика</div>
+              <label className="block">X (категория/дата)
+                <Input value={wMapping.x || ''} onChange={(e)=> setWMapping({ ...wMapping, x: e.target.value })} placeholder="Week" />
+              </label>
+              {wType!=='pie' ? (
+                <label className="block">Y (метрика)
+                  <Input value={wMapping.y || ''} onChange={(e)=> setWMapping({ ...wMapping, y: e.target.value })} placeholder="Count" />
+                </label>
+              ) : (
+                <label className="block">Категория (для Pie)
+                  <Input value={wMapping.category || ''} onChange={(e)=> setWMapping({ ...wMapping, category: e.target.value })} placeholder="Category" />
+                </label>
+              )}
+              <label className="block">Group by (серии)
+                <Input value={wMapping.groupBy || ''} onChange={(e)=> setWMapping({ ...wMapping, groupBy: e.target.value })} placeholder="Source" />
+              </label>
+              <label className="block">Aggregate
+                <select className="border rounded px-2 py-1" value={wMapping.aggregate || 'count'} onChange={(e)=> setWMapping({ ...wMapping, aggregate: e.target.value as any })}>
+                  <option value="count">count</option>
+                  <option value="sum">sum</option>
+                  <option value="avg">avg</option>
+                  <option value="min">min</option>
+                  <option value="max">max</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
           {/* Admin Secret removed for UI operations */}
           {err2 ? <div className="text-sm text-red-600">{err2}</div> : null}
           <div className="flex justify-end gap-2">
