@@ -9,43 +9,131 @@ type LinkItem = { id: string | number; dataSource?: { id: string | number; name:
 type WidgetItem = { id: string | number; title: string; type: string };
 function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000 }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number }) {
   const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][]; total?: number }>({ loading: true });
+  const [page, setPage] = React.useState(0);
+  const [preview, setPreview] = React.useState<{ columns: { key: string; type?: string }[]; distinct: Record<string, any[]> } | null>(null);
+  const [activeFilterCol, setActiveFilterCol] = React.useState<string>('');
+  const [selectedValues, setSelectedValues] = React.useState<Record<string, Set<string>>>(() => ({}));
+
+  function encodeFilters(): string | undefined {
+    const items: any[] = [];
+    Object.entries(selectedValues).forEach(([col, set]) => {
+      if (set.size > 0) items.push({ col, op: 'in', value: Array.from(set) });
+    });
+    if (items.length === 0) return undefined;
+    const tree = { op: 'AND', items };
+    try {
+      const json = JSON.stringify(tree);
+      // utf8 -> b64
+      const b64 = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(json))) : Buffer.from(json, 'utf8').toString('base64');
+      return b64;
+    } catch { return undefined; }
+  }
+
+  async function fetchPage(curPage: number) {
+    const offset = curPage * pageSize;
+    const filters = encodeFilters();
+    const qs = new URLSearchParams({ sheet: sheetTitle, range, limit: String(pageSize), offset: String(offset) });
+    if (filters) qs.set('filters', filters);
+    const res = await fetch(`/api/data-sources/${dataSourceId}/read?${qs.toString()}`, { cache: 'no-store', credentials: 'include' });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j?.error || 'Ошибка загрузки');
+    setState({ loading: false, columns: j.columns || [], rows: j.rows || [], total: j.total });
+  }
+
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/data-sources/${dataSourceId}/read?sheet=${encodeURIComponent(sheetTitle)}&range=${encodeURIComponent(range)}&limit=${pageSize}&offset=0`, { cache: 'no-store', credentials: 'include' });
-        const j = await res.json();
-        if (!res.ok) throw new Error(j?.error || 'Ошибка загрузки');
-        if (!cancelled) setState({ loading: false, columns: j.columns || [], rows: j.rows || [], total: j.total });
+        setState((s) => ({ ...s, loading: true, error: undefined }));
+        await fetchPage(0);
+        if (cancelled) return;
       } catch (e: any) {
         if (!cancelled) setState({ loading: false, error: e.message || 'Ошибка' });
       }
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataSourceId, sheetTitle, range]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/data-sources/${dataSourceId}/preview?sheet=${encodeURIComponent(sheetTitle)}&range=${encodeURIComponent(range)}`, { cache: 'no-store' });
+        if (res.ok) setPreview(await res.json());
+      } catch {}
+    })();
   }, [dataSourceId, sheetTitle, range]);
 
   if (state.loading) return <div className="text-xs text-gray-500">Loading…</div>;
   if (state.error) return <div className="text-xs text-red-600">{state.error}</div>;
   const cols = state.columns || [];
   const rows = state.rows || [];
-  if (rows.length === 0) return <div className="text-xs text-gray-500">Пусто</div>;
+  const total = state.total ?? rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   return (
-    <div className="overflow-auto border rounded">
-      <div className="text-[11px] text-gray-600 px-2 py-1">Rows: {state.total ?? rows.length}</div>
-      <table className="min-w-full text-xs">
-        <thead className="bg-gray-50 sticky top-0">
-          <tr>
-            {cols.map((c, i) => (<th key={i} className="px-2 py-1 text-left border-b">{String(c)}</th>))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, idx) => (
-            <tr key={idx} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
-              {r.map((cell: any, ci: number) => (<td key={ci} className="px-2 py-1 border-b">{String(cell ?? '')}</td>))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {/* Filters panel */}
+      {preview ? (
+        <div className="border rounded p-2 text-xs bg-gray-50">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select className="border rounded px-2 py-1" value={activeFilterCol} onChange={(e)=> setActiveFilterCol(e.target.value)}>
+              <option value="">— колонка —</option>
+              {preview.columns.map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
+            </select>
+            {activeFilterCol ? (
+              <select className="border rounded px-2 py-1" multiple size={3} value={Array.from(selectedValues[activeFilterCol]||[])} onChange={(e)=>{
+                const set = new Set<string>();
+                Array.from(e.target.selectedOptions).forEach(o=> set.add(o.value));
+                setSelectedValues((prev)=> ({ ...prev, [activeFilterCol]: set }));
+              }}>
+                {(preview.distinct[activeFilterCol] || []).map((v, i)=> (
+                  <option key={i} value={String(v ?? '')}>{String(v ?? '')}</option>
+                ))}
+              </select>
+            ) : null}
+            <button className="ml-auto underline" onClick={async ()=>{ setPage(0); await fetchPage(0); }}>Применить</button>
+            <button className="underline" onClick={async ()=>{ setSelectedValues({}); setPage(0); await fetchPage(0); }}>Сбросить</button>
+          </div>
+          {/* Chips */}
+          <div className="mt-2 flex gap-2 flex-wrap">
+            {Object.entries(selectedValues).flatMap(([col, set]) => Array.from(set).map((val) => (
+              <span key={col+':'+val} className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                <span>{col}: {val}</span>
+                <button onClick={async ()=>{ const copy = new Set(selectedValues[col]); copy.delete(val); setSelectedValues({ ...selectedValues, [col]: copy }); setPage(0); await fetchPage(0); }}>×</button>
+              </span>
+            )))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Table */}
+      {rows.length === 0 ? <div className="text-xs text-gray-500">Пусто</div> : (
+        <div className="overflow-auto border rounded">
+          <div className="text-[11px] text-gray-600 px-2 py-1 flex items-center justify-between">
+            <div>Rows: {total}</div>
+            <div className="flex items-center gap-2">
+              <button className="px-2 py-0.5 border rounded text-xs" disabled={page<=0} onClick={async ()=>{ const np = Math.max(0, page-1); setPage(np); await fetchPage(np); }}>Prev</button>
+              <span className="text-gray-500">{page+1}/{totalPages}</span>
+              <button className="px-2 py-0.5 border rounded text-xs" disabled={page+1>=totalPages} onClick={async ()=>{ const np = Math.min(totalPages-1, page+1); setPage(np); await fetchPage(np); }}>Next</button>
+            </div>
+          </div>
+          <table className="min-w-full text-xs">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                {cols.map((c, i) => (<th key={i} className="px-2 py-1 text-left border-b">{String(c)}</th>))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => (
+                <tr key={idx} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
+                  {r.map((cell: any, ci: number) => (<td key={ci} className="px-2 py-1 border-b">{String(cell ?? '')}</td>))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
