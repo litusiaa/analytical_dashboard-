@@ -281,6 +281,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [miniCols, setMiniCols] = useState<{ key: string; type?: string }[]>([]);
   const [miniRows, setMiniRows] = useState<any[][]>([]);
   const [miniLoading, setMiniLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ x?: string; y?: string; category?: string }>(()=>({}));
   const [secret2, setSecret2] = useState('');
   const [loading2, setLoading2] = useState(false);
   const [err2, setErr2] = useState<string | null>(null);
@@ -352,6 +353,42 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
+  // Auto preview when key inputs change
+  useEffect(() => {
+    (async () => {
+      if (!openAddWidget) return;
+      if (!wDataSourceId || !wSheetTitle) return;
+      try {
+        setMiniLoading(true);
+        const p = await fetch(`/api/data-sources/${wDataSourceId}/preview?sheet=${encodeURIComponent(wSheetTitle)}&range=${encodeURIComponent(wRange||'A1:Z')}`, { cache: 'no-store' });
+        if (p.ok) {
+          const jp = await p.json();
+          const cols = (jp.columns || []) as { key: string; type?: string }[];
+          setMiniCols(cols);
+          // Infer defaults (quality-of-life)
+          if (!wMapping.x) {
+            const byName = cols.find(c=> /week|недел|date|дата|created/i.test(c.key)) || cols[0];
+            if (byName) setWMapping((m)=> ({ ...m, x: byName.key }));
+          }
+          if (!wMapping.y) {
+            const numeric = cols.find(c=> (c.type==='number') && /count|колич|sum|итог/i.test(c.key)) || cols.find(c=> c.type==='number');
+            setWMapping((m)=> ({ ...m, y: numeric ? numeric.key : '__count', aggregate: numeric ? (m.aggregate||'sum') : 'count' }));
+          }
+          if (!wMapping.groupBy) {
+            const cat = cols.find(c=> /source|источник|category|катег/i.test(c.key));
+            if (cat) setWMapping((m)=> ({ ...m, groupBy: cat.key }));
+          }
+        }
+        const r = await fetch(`/api/data-sources/${wDataSourceId}/read?sheet=${encodeURIComponent(wSheetTitle)}&range=${encodeURIComponent(wRange||'A1:Z')}&limit=5&offset=0`, { cache: 'no-store' });
+        const jr = await r.json();
+        if (r.ok) setMiniRows(jr.rows||[]);
+      } finally {
+        setMiniLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAddWidget, wDataSourceId, wSheetTitle, wRange]);
+
   // When opening the widget modal, ensure we have up-to-date sources and prefer showing drafts if no published exist
   useEffect(() => {
     if (openAddWidget) {
@@ -418,6 +455,17 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     setLoading2(true);
     setErr2(null);
     try {
+      // Validate
+      const errs: any = {};
+      if (wType==='line' || wType==='bar') {
+        if (!wMapping.x) errs.x = 'Укажите ось X';
+        if (!wMapping.y) errs.y = 'Укажите метрику Y';
+      } else if (wType==='pie') {
+        if (!wMapping.x && !wMapping.category) errs.x = 'Укажите категорию';
+        if (!wMapping.y) errs.y = 'Укажите метрику Y или выберите «Счётчик строк»';
+      }
+      setFieldErrors(errs);
+      if (Object.keys(errs).length>0) { throw new Error('Заполните обязательные поля'); }
       const res = await fetch(`/api/dashboards/${slug}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -839,6 +887,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   {miniCols.map((c)=> (<option key={c.key} value={c.key}>{c.key}</option>))}
                 </select>
                 <div className="text-[11px] text-gray-500 mt-0.5">Выберите категорию или дату для группировки данных</div>
+                {fieldErrors.x ? <div className="text-[11px] text-red-600 mt-0.5">{fieldErrors.x}</div> : null}
               </label>
               {wType!=='pie' ? (
                 <label className="block">Ось Y (метрика)
@@ -848,6 +897,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     <option value="__count">Счётчик строк</option>
                   </select>
                   <div className="text-[11px] text-gray-500 mt-0.5">Выберите числовое поле для отображения на графике</div>
+                  {fieldErrors.y ? <div className="text-[11px] text-red-600 mt-0.5">{fieldErrors.y}</div> : null}
                 </label>
               ) : (
                 <label className="block">Категория (для круговой)
@@ -876,6 +926,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 </select>
                 <div className="text-[11px] text-gray-500 mt-0.5">Выберите метод обработки чисел (сумма, количество и т.д.)</div>
               </label>
+              <div className="text-[11px] text-gray-500">X — категория/ось времени; Y — числовая метрика; Серии — разбивка по ещё одному полю. Если нет числовых колонок, используйте «Счётчик строк».</div>
             </div>
           ) : null}
           {/* Admin Secret removed for UI operations */}
