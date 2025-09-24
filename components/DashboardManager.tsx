@@ -506,6 +506,20 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     return { x, y, width, height, zIndex: 0 };
   }
 
+  function intersects(a: { x:number;y:number;width:number;height:number }, b: { x:number;y:number;width:number;height:number }): boolean {
+    return !(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y);
+  }
+
+  function willCollide(next: { x:number;y:number;width:number;height:number }, selfId: number, visibleWidgets: WidgetItem[], currentLayout: Record<number, { x:number;y:number;width:number;height:number;zIndex:number }>): boolean {
+    for (let i = 0; i < visibleWidgets.length; i++) {
+      const wid = Number((visibleWidgets[i] as any).id);
+      if (wid === selfId) continue;
+      const r = currentLayout[wid] || defaultRect(i);
+      if (intersects(next, r)) return true;
+    }
+    return false;
+  }
+
   // Auto preview when key inputs change
   useEffect(() => {
     (async () => {
@@ -914,11 +928,28 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
+                      const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
+                      const visible = widgets.filter((vw: any) => {
+                        const st = (vw as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st;
+                      });
+                      if (willCollide(proposal, Number((w as any).id), visible, layout)) {
+                        // отменяем сохранение, возврат к предыдущему состоянию
+                        setLayout({ ...layout });
+                        return;
+                      }
                       const next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
                       saveLayoutDebounced(next);
                     }}
                     onResizeStop={(e, dir, ref, delta, pos) => {
                       isInteractingRef.current = false;
+                      const proposal = { x: pos.x, y: pos.y, width: ref.offsetWidth, height: ref.offsetHeight };
+                      const visible = widgets.filter((vw: any) => {
+                        const st = (vw as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st;
+                      });
+                      if (willCollide(proposal, Number((w as any).id), visible, layout)) {
+                        setLayout({ ...layout });
+                        return;
+                      }
                       const next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
                       saveLayoutDebounced(next);
                     }}>
