@@ -5,6 +5,7 @@ import { Modal } from '@/components/Modal';
 import { Input } from '@/components/Input';
 import { Spinner } from '@/components/Spinner';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { GOOGLE_CALENDAR_CLIENT_ID } from '@/lib/publicEnv';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
@@ -314,8 +315,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [calPreview, setCalPreview] = useState<any[]>([]);
   const [calLoading, setCalLoading] = useState(false);
   const [calError, setCalError] = useState<string>('');
-  const CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID) as string | undefined;
-  const [hasClientId, setHasClientId] = useState<boolean>(Boolean(CLIENT_ID));
+  const clientId = GOOGLE_CALENDAR_CLIENT_ID;
+  const [hasClientId, setHasClientId] = useState<boolean>(Boolean(clientId));
   const [calConfigChecked, setCalConfigChecked] = useState<boolean>(false);
 
   useEffect(() => {
@@ -326,7 +327,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         try {
           const c = await fetch('/api/calendar/config', { cache: 'no-store' });
           const j = await c.json(); setHasClientId(Boolean(j?.hasClientId));
-        } catch { setHasClientId(Boolean(CLIENT_ID)); }
+        } catch { setHasClientId(Boolean(clientId)); }
         finally { setCalConfigChecked(true); }
         if (calList.length === 0) {
           const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
@@ -903,7 +904,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               <div className="mb-1">Люди (календарь)</div>
               <Input value={calQuery} onChange={(e)=> setCalQuery(e.target.value)} placeholder="Поиск по имени/email" />
               {calError ? <div className="text-[12px] text-red-700 mt-1">{calError}</div> : null}
-              {calConfigChecked && !hasClientId ? <div className="text-[12px] text-red-700 mt-1">Missing ENV GOOGLE_CALENDAR_CLIENT_ID</div> : null}
+              {calConfigChecked && (!hasClientId || !clientId) ? <div className="text-[12px] text-red-700 mt-1">Missing ENV GOOGLE_CALENDAR_CLIENT_ID</div> : null}
               <div className="mt-1 max-h-48 overflow-auto border rounded">
                 <ul className="text-sm">
                   {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {

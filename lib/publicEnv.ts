@@ -1,0 +1,3 @@
+export const GOOGLE_CALENDAR_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID ?? '';
+
+
