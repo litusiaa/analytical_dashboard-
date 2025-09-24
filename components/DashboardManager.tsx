@@ -240,7 +240,9 @@ function CalendarWidgetPreview({ config }: { config: any }) {
         const ids = Array.isArray(config?.calendars) ? config.calendars.join(',') : '';
         const now = new Date();
         const timeMin = now.toISOString();
-        const timeMax = new Date(now.getTime() + 7*24*3600*1000).toISOString();
+        const mode = (config?.mode || 'day') as 'day'|'week'|'month';
+        const days = mode === 'day' ? 1 : mode === 'week' ? 7 : 30;
+        const timeMax = new Date(now.getTime() + days*24*3600*1000).toISOString();
         const r = await fetch(`/api/calendar/events?calendarId=${encodeURIComponent(ids)}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`, { cache: 'no-store' });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || 'Ошибка');
