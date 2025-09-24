@@ -314,7 +314,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [calPreview, setCalPreview] = useState<any[]>([]);
   const [calLoading, setCalLoading] = useState(false);
   const [calError, setCalError] = useState<string>('');
-  const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID as string | undefined;
+  const CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID) as string | undefined;
   const [hasClientId, setHasClientId] = useState<boolean>(Boolean(CLIENT_ID));
 
   useEffect(() => {
