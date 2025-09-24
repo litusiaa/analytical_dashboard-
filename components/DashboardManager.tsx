@@ -463,6 +463,52 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     }
   }
 
+  async function handleAddPipedrive() {
+    setLoading1(true);
+    setErr1(null);
+    try {
+      const payload: any = {
+        type: 'pipedrive',
+        name: srcName || undefined,
+        entity: pdEntity,
+        config: {
+          pipelineId: pdPipelineId ? Number(pdPipelineId) : undefined,
+          stageIds: pdStageIds ? pdStageIds.split(',').map(s=> Number(s.trim())).filter(n=>!Number.isNaN(n)) : undefined,
+          ownerIds: pdOwnerIds ? pdOwnerIds.split(',').map(s=> Number(s.trim())).filter(n=>!Number.isNaN(n)) : undefined,
+          dateField: pdDateField || undefined,
+          dateFrom: pdDateFrom || undefined,
+          dateTo: pdDateTo || undefined,
+          fields: pdFields ? pdFields.split(',').map(s=> s.trim()) : undefined,
+          savedFilterId: pdSavedFilterId ? Number(pdSavedFilterId) : undefined,
+        }
+      };
+      const res2 = await fetch(`/api/dashboards/${slug}/data-sources`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'include'
+      });
+      if (!res2.ok) {
+        const txt = await res2.text();
+        let err = 'Не удалось сохранить источник';
+        try { const j = JSON.parse(txt); if (j?.error) err = j.error; else if (j?.message) err = j.message; } catch {}
+        throw new Error(err);
+      }
+      const created = await res2.json();
+      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Pipedrive', type: 'pipedrive', status: 'draft' } }, ...prev]);
+      try {
+        const resL = await fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store' });
+        if (resL.ok) {
+          const dataL = await resL.json(); setLinks(dataL.items || []);
+        }
+      } catch {}
+      setOpenAddPipedrive(false);
+      setSrcName(''); setPdPipelineId(''); setPdStageIds(''); setPdOwnerIds(''); setPdDateField(''); setPdDateFrom(''); setPdDateTo(''); setPdFields(''); setPdSavedFilterId(''); setPdPreview(null);
+      setShowDraftsInWidget(true);
+    } catch (e: any) {
+      setErr1(e.message || 'Ошибка');
+    } finally {
+      setLoading1(false);
+    }
+  }
+
   async function handleAddWidget() {
     setLoading2(true);
     setErr2(null);
@@ -951,6 +997,93 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <div className="flex justify-end gap-2 sticky bottom-0 bg-white pt-2">
             <Button variant="secondary" onClick={() => setOpenAddWidget(false)}>Отмена</Button>
             <Button onClick={handleAddWidget} disabled={loading2 || !wTitle || !wDataSourceId || !wSheetTitle}>{loading2 ? 'Сохранение…' : 'Сохранить'}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={canEdit && openAddPipedrive} onClose={() => setOpenAddPipedrive(false)} title="Добавить источник Pipedrive">
+        <div className="space-y-3">
+          <label className="block text-sm">Name
+            <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="Pipedrive Deals" />
+          </label>
+          <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-sm col-span-2">Сущность
+                <select className="border rounded px-2 py-1 w-full" value={pdEntity} onChange={(e)=> setPdEntity(e.target.value as any)}>
+                  <option value="deals">Сделки</option>
+                  <option value="persons">Контакты</option>
+                  <option value="organizations">Организации</option>
+                  <option value="activities">Активности</option>
+                </select>
+              </label>
+              <label className="block text-sm">Воронка (pipelineId)
+                <Input value={pdPipelineId} onChange={(e)=> setPdPipelineId(e.target.value)} placeholder="1" />
+              </label>
+              <label className="block text-sm">Этапы (stageIds, через запятую)
+                <Input value={pdStageIds} onChange={(e)=> setPdStageIds(e.target.value)} placeholder="1,2,3" />
+              </label>
+              <label className="block text-sm">Владельцы (ownerIds, через запятую)
+                <Input value={pdOwnerIds} onChange={(e)=> setPdOwnerIds(e.target.value)} placeholder="123,456" />
+              </label>
+              <label className="block text-sm">Поле даты
+                <Input value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)} placeholder="update_time" />
+              </label>
+              <label className="block text-sm">Дата от
+                <Input value={pdDateFrom} onChange={(e)=> setPdDateFrom(e.target.value)} placeholder="2025-09-01" />
+              </label>
+              <label className="block text-sm">Дата до
+                <Input value={pdDateTo} onChange={(e)=> setPdDateTo(e.target.value)} placeholder="2025-09-30" />
+              </label>
+              <label className="block text-sm col-span-2">Поля (через запятую)
+                <Input value={pdFields} onChange={(e)=> setPdFields(e.target.value)} placeholder="title,value,currency,custom.*" />
+              </label>
+              <label className="block text-sm">Saved Filter ID (опц.)
+                <Input value={pdSavedFilterId} onChange={(e)=> setPdSavedFilterId(e.target.value)} placeholder="null" />
+              </label>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm">Предпросмотр (5 строк)</div>
+              <button className="underline" onClick={async ()=>{
+                try {
+                  const qs = new URLSearchParams({ entity: pdEntity, limit: '5' });
+                  if (pdPipelineId) qs.set('pipelineId', pdPipelineId);
+                  if (pdStageIds) qs.set('stageIds', pdStageIds);
+                  if (pdOwnerIds) qs.set('ownerIds', pdOwnerIds);
+                  if (pdDateField) qs.set('dateField', pdDateField);
+                  if (pdDateFrom) qs.set('dateFrom', pdDateFrom);
+                  if (pdDateTo) qs.set('dateTo', pdDateTo);
+                  if (pdFields) qs.set('fields', JSON.stringify(pdFields.split(',').map(s=> s.trim())));
+                  if (pdSavedFilterId) qs.set('savedFilterId', pdSavedFilterId);
+                  const r = await fetch(`/api/pipedrive/preview?${qs.toString()}`, { cache: 'no-store' });
+                  const j = await r.json();
+                  if (!r.ok) throw new Error(j?.error||'Ошибка превью');
+                  setPdPreview(j);
+                } catch (e:any) { alert(e.message||'Ошибка превью'); }
+              }}>Обновить превью</button>
+            </div>
+            {pdPreview ? (
+              <div className="overflow-auto">
+                <table className="min-w-full text-xs table-fixed border-separate border-spacing-0">
+                  <thead className="bg-white sticky top-0 z-10">
+                    <tr>
+                      {pdPreview.columns.map((c)=> (<th key={c.key} className="px-2 py-1 text-left border border-gray-200">{c.key}{c.type?` (${c.type})`:''}</th>))}
+                    </tr>
+                  </thead>
+                  <tbody className="[&>tr:nth-child(odd)]:bg-gray-50">
+                    {(pdPreview.sample||[]).map((row:any, i:number)=> (
+                      <tr key={i} className="hover:bg-gray-100">
+                        {pdPreview.columns.map((c)=> (<td key={c.key} className="px-2 py-1 border border-gray-200 align-top break-words">{String(row?.[c.key] ?? '—')}</td>))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="text-gray-500">Нажмите «Обновить превью», чтобы увидеть колонки</div>}
+          </div>
+          {err1 ? (<div className="text-sm text-red-600">{err1}</div>) : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setOpenAddPipedrive(false)}>Отмена</Button>
+            <Button onClick={handleAddPipedrive} disabled={loading1}>{loading1 ? (<> <Spinner /> <span className="ml-2">Сохраняем…</span></>) : 'Сохранить'}</Button>
           </div>
         </div>
       </Modal>
