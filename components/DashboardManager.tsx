@@ -264,6 +264,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [pdOwners, setPdOwners] = useState<Array<{ id: number; name: string }>>([]);
   const [pdFieldsList, setPdFieldsList] = useState<Array<{ key: string; name: string }>>([]);
   const [pdFilters, setPdFilters] = useState<Array<{ id: number; name: string }>>([]);
+  const [pdOwnerQuery, setPdOwnerQuery] = useState('');
+  const [pdFieldQuery, setPdFieldQuery] = useState('');
+  const [pdFieldsSel, setPdFieldsSel] = useState<Set<string>>(new Set());
 
   const [checking, setChecking] = useState<'idle'|'loading'|'ok'|'noaccess'|'invalid'|'nodata'>('idle');
 
@@ -1071,27 +1074,50 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   {pdPipelines.map((p)=> (<option key={p.id} value={String(p.id)}>{p.name}</option>))}
                 </select>
               </label>
-              <label className="block text-sm">Этапы
-                <select multiple className="border rounded px-2 py-1 w-full" value={pdStageIds?pdStageIds.split(','):[]} onChange={(e)=>{ const vals = Array.from(e.target.selectedOptions).map(o=> o.value); setPdStageIds(vals.join(',')); }}>
-                  {pdStagesAll.filter(s=> !pdPipelineId || String(s.pipeline_id)===String(pdPipelineId)).map((s)=> (<option key={s.id} value={String(s.id)}>{s.name}</option>))}
-                </select>
-              </label>
-              <label className="block text-sm">Владельцы
-                <select multiple className="border rounded px-2 py-1 w-full" value={pdOwnerIds?pdOwnerIds.split(','):[]} onChange={(e)=>{ const vals = Array.from(e.target.selectedOptions).map(o=> o.value); setPdOwnerIds(vals.join(',')); }}>
-                  {pdOwners.map((u)=> (<option key={u.id} value={String(u.id)}>{u.name}</option>))}
-                </select>
-              </label>
-              <label className="block text-sm">Поле даты
-                <select className="border rounded px-2 py-1 w-full" value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)}>
+              <div className="block text-sm">
+                <div className="mb-1">Этапы</div>
+                <div className="flex gap-1 flex-wrap">
+                  {pdStagesAll.filter(s=> !pdPipelineId || String(s.pipeline_id)===String(pdPipelineId)).map((s)=> {
+                    const sel = (pdStageIds?pdStageIds.split(','):[]).includes(String(s.id));
+                    return (
+                      <button key={s.id} type="button" className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
+                        const cur = new Set(pdStageIds?pdStageIds.split(','):[]);
+                        if (cur.has(String(s.id))) cur.delete(String(s.id)); else cur.add(String(s.id));
+                        setPdStageIds(Array.from(cur).join(','));
+                      }}>{s.name}</button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="block text-sm">
+                <div className="mb-1">Владельцы</div>
+                <Input value={pdOwnerQuery} onChange={(e)=> setPdOwnerQuery(e.target.value)} placeholder="Поиск владельца" />
+                <div className="mt-1 flex gap-1 flex-wrap max-h-28 overflow-auto">
+                  {pdOwners.filter(u=> (u.name||'').toLowerCase().includes(pdOwnerQuery.toLowerCase())).map((u)=> {
+                    const cur = new Set(pdOwnerIds?pdOwnerIds.split(','):[]);
+                    const sel = cur.has(String(u.id));
+                    return (
+                      <button key={u.id} type="button" className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
+                        if (sel) cur.delete(String(u.id)); else cur.add(String(u.id));
+                        setPdOwnerIds(Array.from(cur).join(','));
+                      }}>{u.name}</button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="block text-sm col-span-2">
+                <div className="mb-1">Поле даты</div>
+                <Input value={pdFieldQuery} onChange={(e)=> setPdFieldQuery(e.target.value)} placeholder="Поиск поля" />
+                <select className="mt-1 border rounded px-2 py-1 w-full" value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)}>
                   <option value="">— выбрать —</option>
-                  {pdFieldsList.map((f)=> (<option key={f.key} value={f.key}>{f.name}</option>))}
+                  {pdFieldsList.filter(f=> (f.name||f.key).toLowerCase().includes(pdFieldQuery.toLowerCase())).map((f)=> (<option key={f.key} value={f.key}>{f.name}</option>))}
                 </select>
-              </label>
+              </div>
               <label className="block text-sm">Дата от
-                <Input value={pdDateFrom} onChange={(e)=> setPdDateFrom(e.target.value)} placeholder="2025-09-01" />
+                <input type="date" className="border rounded px-2 py-1 w-full" value={pdDateFrom} onChange={(e)=> setPdDateFrom(e.target.value)} />
               </label>
               <label className="block text-sm">Дата до
-                <Input value={pdDateTo} onChange={(e)=> setPdDateTo(e.target.value)} placeholder="2025-09-30" />
+                <input type="date" className="border rounded px-2 py-1 w-full" value={pdDateTo} onChange={(e)=> setPdDateTo(e.target.value)} />
               </label>
               <label className="block text-sm">Saved Filter
                 <select className="border rounded px-2 py-1 w-full" value={pdSavedFilterId} onChange={(e)=> setPdSavedFilterId(e.target.value)}>
@@ -1099,10 +1125,24 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   {pdFilters.map((f)=> (<option key={f.id} value={String(f.id)}>{f.name}</option>))}
                 </select>
               </label>
-              <label className="block text-sm col-span-2">Поля (через запятую)
-                <Input value={pdFields} onChange={(e)=> setPdFields(e.target.value)} placeholder="title,value,currency,custom.*" />
-                <div className="text-[11px] text-gray-500 mt-0.5">Популярные: {pdFieldsList.slice(0,6).map(f=> f.key).join(', ')}</div>
-              </label>
+              <div className="block text-sm col-span-2">
+                <div className="mb-1">Поля (для выборки/отображения)</div>
+                <Input value={pdFieldQuery} onChange={(e)=> setPdFieldQuery(e.target.value)} placeholder="Поиск поля" />
+                <div className="mt-1 flex gap-1 flex-wrap max-h-28 overflow-auto">
+                  {pdFieldsList.filter(f=> (f.name||f.key).toLowerCase().includes(pdFieldQuery.toLowerCase())).map((f)=> {
+                    const sel = pdFieldsSel.has(f.key);
+                    return (
+                      <button key={f.key} type="button" className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
+                        const next = new Set(pdFieldsSel);
+                        if (sel) next.delete(f.key); else next.add(f.key);
+                        setPdFieldsSel(next);
+                        setPdFields(Array.from(next).join(','));
+                      }}>{f.name}</button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-gray-500 mt-0.5">Выбрано: {Array.from(pdFieldsSel).length}</div>
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <div className="text-sm">Предпросмотр (5 строк)</div>
