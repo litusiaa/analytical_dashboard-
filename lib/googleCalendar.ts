@@ -6,6 +6,15 @@ function env(name: string, def?: string): string {
   return v;
 }
 
+function envAny(names: string[], def?: string): string {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v) return v;
+  }
+  if (def) return def;
+  throw new Error(`Missing ENV ${names.join(' or ')}`);
+}
+
 const TZ = env('APP_TIMEZONE', 'Europe/Moscow');
 
 async function ensureTable() {
@@ -23,7 +32,7 @@ async function ensureTable() {
 
 export async function getAccessToken(): Promise<string> {
   const provider = 'google';
-  const refreshToken = env('GOOGLE_CALENDAR_REFRESH_TOKEN');
+  const refreshToken = envAny(['GOOGLE_CALENDAR_REFRESH_TOKEN','GOOGLE_OAUTH_REFRESH_TOKEN']);
   await ensureTable();
   // Ensure row exists and refresh token is stored
   let row: any = null;
@@ -44,8 +53,8 @@ export async function getAccessToken(): Promise<string> {
   if (row?.access_token && row?.expiry_date && new Date(row.expiry_date).getTime() - 60_000 > now) {
     return String(row.access_token);
   }
-  const client_id = env('GOOGLE_CALENDAR_CLIENT_ID');
-  const client_secret = env('GOOGLE_CALENDAR_CLIENT_SECRET');
+  const client_id = envAny(['GOOGLE_CALENDAR_CLIENT_ID','GOOGLE_OAUTH_CLIENT_ID']);
+  const client_secret = envAny(['GOOGLE_CALENDAR_CLIENT_SECRET','GOOGLE_OAUTH_CLIENT_SECRET']);
   const refresh_token = row?.refresh_token || refreshToken;
   const params = new URLSearchParams({
     client_id,
