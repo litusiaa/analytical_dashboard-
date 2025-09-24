@@ -9,6 +9,19 @@ import { GOOGLE_CALENDAR_CLIENT_ID } from '@/lib/publicEnv';
 
 type LinkItem = { id: string | number; dataSource?: { id: string | number; name: string; type: string } };
 type WidgetItem = { id: string | number; title: string; type: string };
+
+// Предустановленные корпоративные календари для быстрого выбора
+const STAFF_CALENDARS: Array<{ id: string; summary: string }> = [
+  { id: 'em@dbrain.io', summary: 'Егор Москвин' },
+  { id: 'k.polyakov@dbrain.io', summary: 'Константин Поляков' },
+  { id: 'maksim.k@dbrain.io', summary: 'Максим Короткевич' },
+  { id: 'ekaterina.bogdanova@dbrain.io', summary: 'Екатерина Богданова' },
+  { id: 'valeria.ivanova@dbrain.io', summary: 'Валерия Иванова' },
+  { id: 'polina.svavilnaya@dbrain.io', summary: 'Полина Свавильная' },
+  { id: 'ks@dbrain.io', summary: 'Кирилл Стасюкевич' },
+  { id: 'evgenia.popova@dbrain.io', summary: 'Евгения Попова' },
+  { id: 'mp@dbrain.io', summary: 'Мария Паращенко' },
+];
 function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, canEdit = false, slug, widget }: { dataSourceId: number; sheetTitle: string; range: string; pageSize?: number; canEdit?: boolean; slug: string; widget?: any }) {
   const [state, setState] = React.useState<{ loading: boolean; error?: string; columns?: string[]; rows?: any[][]; total?: number }>({ loading: true });
   const [page, setPage] = React.useState(0);
@@ -215,6 +228,46 @@ function TableWidgetPreview({ dataSourceId, sheetTitle, range, pageSize = 1000, 
     </div>
   );
 }
+
+function CalendarWidgetPreview({ config }: { config: any }) {
+  const [items, setItems] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true); setError(null);
+        const ids = Array.isArray(config?.calendars) ? config.calendars.join(',') : '';
+        const now = new Date();
+        const timeMin = now.toISOString();
+        const timeMax = new Date(now.getTime() + 7*24*3600*1000).toISOString();
+        const r = await fetch(`/api/calendar/events?calendarId=${encodeURIComponent(ids)}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`, { cache: 'no-store' });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error || 'Ошибка');
+        setItems(j.items || []);
+      } catch (e: any) { setError(e.message || 'Ошибка'); } finally { setLoading(false); }
+    })();
+  }, [JSON.stringify(config||{})]);
+  if (loading) return <div className="text-xs text-gray-500">Loading…</div>;
+  if (error) return <div className="text-xs text-red-600">{error}</div>;
+  if (!items.length) return <div className="text-xs text-gray-500">Нет событий</div>;
+  return (
+    <div className="space-y-1">
+      {items.map((e, i) => (
+        <div key={i} className="border rounded p-2 bg-white text-sm">
+          <div className="flex items-center justify-between">
+            <div className="text-gray-700">{new Date(e.start).toLocaleString('ru-RU')}</div>
+            {e.hangoutLink ? <span className="text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded">Meet</span> : null}
+          </div>
+          <div className="font-medium break-words">{e.summary || 'Без названия'}</div>
+          <div className="text-[12px] text-gray-500 break-words">Организатор: {e.organizer || '-'}</div>
+          <div className="text-[12px] text-gray-500">Участники: {(e.attendees||[]).length}</div>
+          {e.hangoutLink ? <a className="text-[12px] text-blue-600 underline" href={e.hangoutLink} target="_blank" rel="noreferrer">Ссылка</a> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 type DataSource = { id: number; name: string; type: string };
 
 async function safeGet<T>(url: string, fallback: T): Promise<T> {
@@ -330,7 +383,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         } catch { setHasClientId(Boolean(clientId)); }
         finally { setCalConfigChecked(true); }
         if (calList.length === 0) {
-          const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
+          const r = await fetch('/api/calendar/list', { cache: 'no-store' });
           const j = await r.json();
           if (r.ok) { setCalList(j || []); setCalError(''); } else { setCalError(j?.error || 'Не удалось получить календари'); }
         }
@@ -805,6 +858,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   <TableWidgetPreview canEdit={canEdit} slug={slug} widget={w} dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
                 ) : (w.type==='line' || w.type==='bar' || w.type==='pie') ? (
                   <ChartWidgetPreview type={w.type as any} config={(w as any).config} />
+                ) : w.type==='calendar' ? (
+                  <CalendarWidgetPreview config={(w as any).config} />
                 ) : null}
               </li>
             ))}
@@ -907,7 +962,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               {calConfigChecked && (!hasClientId || !clientId) ? <div className="text-[12px] text-red-700 mt-1">Missing ENV GOOGLE_CALENDAR_CLIENT_ID</div> : null}
               <div className="mt-1 max-h-48 overflow-auto border rounded">
                 <ul className="text-sm">
-                  {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
+                  {[...STAFF_CALENDARS, ...calList]
+                    .filter((c, idx, arr) => idx === arr.findIndex(x => (x.id||'').toLowerCase() === (c.id||'').toLowerCase()))
+                    .filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase()))
+                    .map(c=> {
                     const sel = calSelected.has(c.id);
                     return (
                       <li key={c.id} className={`px-2 py-1 flex items-center justify-between cursor-pointer ${sel?'bg-blue-50':'bg-white'}`} onClick={()=>{
