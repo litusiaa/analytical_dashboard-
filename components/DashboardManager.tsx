@@ -259,6 +259,11 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [pdFields, setPdFields] = useState('');
   const [pdSavedFilterId, setPdSavedFilterId] = useState('');
   const [pdPreview, setPdPreview] = useState<{ columns: { key: string; type?: string }[]; sample: any[] } | null>(null);
+  const [pdPipelines, setPdPipelines] = useState<Array<{ id: number; name: string }>>([]);
+  const [pdStagesAll, setPdStagesAll] = useState<Array<{ id: number; name: string; pipeline_id: number }>>([]);
+  const [pdOwners, setPdOwners] = useState<Array<{ id: number; name: string }>>([]);
+  const [pdFieldsList, setPdFieldsList] = useState<Array<{ key: string; name: string }>>([]);
+  const [pdFilters, setPdFilters] = useState<Array<{ id: number; name: string }>>([]);
 
   const [checking, setChecking] = useState<'idle'|'loading'|'ok'|'noaccess'|'invalid'|'nodata'>('idle');
 
@@ -542,6 +547,40 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       setLoading2(false);
     }
   }
+
+  // Load Pipedrive directories when opening the Pipedrive modal
+  useEffect(() => {
+    if (!openAddPipedrive) return;
+    (async () => {
+      try {
+        const [pip, usr, flds, flt] = await Promise.all([
+          fetch('/api/pipedrive/pipelines', { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] }),
+          fetch('/api/pipedrive/users', { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(`/api/pipedrive/fields?entity=${pdEntity}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(`/api/pipedrive/filters?entity=${pdEntity}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] }),
+        ]);
+        setPdPipelines(pip.items || []);
+        setPdOwners(usr.items || []);
+        setPdFieldsList((flds.items || []).map((x: any) => ({ key: String(x.key ?? x.id), name: String(x.name ?? x.key) })));
+        setPdFilters(flt.items || []);
+        if (pdPipelineId) {
+          const st = await fetch(`/api/pipedrive/stages?pipelineId=${encodeURIComponent(pdPipelineId)}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] });
+          setPdStagesAll(st.items || []);
+        }
+      } catch {}
+    })();
+  }, [openAddPipedrive, pdEntity, pdPipelineId]);
+
+  // Refetch stages when pipeline changes (while modal open)
+  useEffect(() => {
+    if (!openAddPipedrive) return;
+    (async () => {
+      try {
+        const st = await fetch(`/api/pipedrive/stages?pipelineId=${encodeURIComponent(pdPipelineId||'')}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : { items: [] });
+        setPdStagesAll(st.items || []);
+      } catch {}
+    })();
+  }, [pdPipelineId, openAddPipedrive]);
 
   // server provides canEdit prop; do not rely on document here
 
@@ -1009,24 +1048,44 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <label className="block text-sm col-span-2">Сущность
-                <select className="border rounded px-2 py-1 w-full" value={pdEntity} onChange={(e)=> setPdEntity(e.target.value as any)}>
+                <select className="border rounded px-2 py-1 w-full" value={pdEntity} onChange={async (e)=> {
+                  const val = e.target.value as any; setPdEntity(val);
+                  try {
+                    const [fRes, fltRes] = await Promise.all([
+                      fetch(`/api/pipedrive/fields?entity=${val}`, { cache: 'no-store' }),
+                      fetch(`/api/pipedrive/filters?entity=${val}`, { cache: 'no-store' }),
+                    ]);
+                    if (fRes.ok) { const j = await fRes.json(); setPdFieldsList((j.items||[]).map((x:any)=> ({ key: String(x.key ?? x.id), name: String(x.name ?? x.key) }))); }
+                    if (fltRes.ok) { const j2 = await fltRes.json(); setPdFilters(j2.items||[]); }
+                  } catch {}
+                }}>
                   <option value="deals">Сделки</option>
                   <option value="persons">Контакты</option>
                   <option value="organizations">Организации</option>
                   <option value="activities">Активности</option>
                 </select>
               </label>
-              <label className="block text-sm">Воронка (pipelineId)
-                <Input value={pdPipelineId} onChange={(e)=> setPdPipelineId(e.target.value)} placeholder="1" />
+              <label className="block text-sm">Воронка
+                <select className="border rounded px-2 py-1 w-full" value={pdPipelineId} onChange={(e)=> setPdPipelineId(e.target.value)}>
+                  <option value="">— выберите воронку —</option>
+                  {pdPipelines.map((p)=> (<option key={p.id} value={String(p.id)}>{p.name}</option>))}
+                </select>
               </label>
-              <label className="block text-sm">Этапы (stageIds, через запятую)
-                <Input value={pdStageIds} onChange={(e)=> setPdStageIds(e.target.value)} placeholder="1,2,3" />
+              <label className="block text-sm">Этапы
+                <select multiple className="border rounded px-2 py-1 w-full" value={pdStageIds?pdStageIds.split(','):[]} onChange={(e)=>{ const vals = Array.from(e.target.selectedOptions).map(o=> o.value); setPdStageIds(vals.join(',')); }}>
+                  {pdStagesAll.filter(s=> !pdPipelineId || String(s.pipeline_id)===String(pdPipelineId)).map((s)=> (<option key={s.id} value={String(s.id)}>{s.name}</option>))}
+                </select>
               </label>
-              <label className="block text-sm">Владельцы (ownerIds, через запятую)
-                <Input value={pdOwnerIds} onChange={(e)=> setPdOwnerIds(e.target.value)} placeholder="123,456" />
+              <label className="block text-sm">Владельцы
+                <select multiple className="border rounded px-2 py-1 w-full" value={pdOwnerIds?pdOwnerIds.split(','):[]} onChange={(e)=>{ const vals = Array.from(e.target.selectedOptions).map(o=> o.value); setPdOwnerIds(vals.join(',')); }}>
+                  {pdOwners.map((u)=> (<option key={u.id} value={String(u.id)}>{u.name}</option>))}
+                </select>
               </label>
               <label className="block text-sm">Поле даты
-                <Input value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)} placeholder="update_time" />
+                <select className="border rounded px-2 py-1 w-full" value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)}>
+                  <option value="">— выбрать —</option>
+                  {pdFieldsList.map((f)=> (<option key={f.key} value={f.key}>{f.name}</option>))}
+                </select>
               </label>
               <label className="block text-sm">Дата от
                 <Input value={pdDateFrom} onChange={(e)=> setPdDateFrom(e.target.value)} placeholder="2025-09-01" />
@@ -1034,11 +1093,15 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               <label className="block text-sm">Дата до
                 <Input value={pdDateTo} onChange={(e)=> setPdDateTo(e.target.value)} placeholder="2025-09-30" />
               </label>
+              <label className="block text-sm">Saved Filter
+                <select className="border rounded px-2 py-1 w-full" value={pdSavedFilterId} onChange={(e)=> setPdSavedFilterId(e.target.value)}>
+                  <option value="">— не использовать —</option>
+                  {pdFilters.map((f)=> (<option key={f.id} value={String(f.id)}>{f.name}</option>))}
+                </select>
+              </label>
               <label className="block text-sm col-span-2">Поля (через запятую)
                 <Input value={pdFields} onChange={(e)=> setPdFields(e.target.value)} placeholder="title,value,currency,custom.*" />
-              </label>
-              <label className="block text-sm">Saved Filter ID (опц.)
-                <Input value={pdSavedFilterId} onChange={(e)=> setPdSavedFilterId(e.target.value)} placeholder="null" />
+                <div className="text-[11px] text-gray-500 mt-0.5">Популярные: {pdFieldsList.slice(0,6).map(f=> f.key).join(', ')}</div>
               </label>
             </div>
             <div className="flex items-center justify-between">

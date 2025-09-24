@@ -121,6 +121,8 @@ async function pdFetch<T>(path: string, params?: Record<string, string | number 
 export type PdUser = { id: number; name: string; email?: string | null };
 export type PdPipeline = { id: number; name: string };
 export type PdStage = { id: number; name: string; pipeline_id: number; order_nr?: number };
+export type PdField = { id: number; key: string; name: string; field_type?: string };
+export type PdFilter = { id: number; name: string; visible_to?: string };
 export type PdDeal = {
   id: number;
   title: string;
@@ -176,5 +178,23 @@ export async function fetchStageHistory(dealId: number): Promise<StageChange[]> 
     // TODO: webhook fallback (not implemented in MVP)
     return [];
   }
+}
+
+// Fields by entity (deals/persons/organizations/activities)
+export async function fetchFields(entity: PipedriveEntity): Promise<PdField[]> {
+  const map: Record<PipedriveEntity, string> = {
+    deals: '/dealFields',
+    persons: '/personFields',
+    organizations: '/organizationFields',
+    activities: '/activityFields',
+  };
+  const path = map[entity];
+  return pdFetch<PdField[]>(path);
+}
+
+// Saved filters by entity
+export async function fetchFilters(entity: PipedriveEntity): Promise<PdFilter[]> {
+  // API: GET /filters?type=deals|persons|organizations|activities
+  return pdFetch<PdFilter[]>('/filters', { type: entity });
 }
 
