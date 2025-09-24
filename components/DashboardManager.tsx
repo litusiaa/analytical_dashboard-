@@ -891,8 +891,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               .map((w, idx) => {
                 const r = layout[Number(w.id)] || defaultRect(idx);
                 const content = (
-                  <div className="w-full h-full p-2 bg-white border rounded shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="w-full h-full p-2 bg-white border rounded shadow-sm overflow-auto">
+                    <div className="flex items-center justify-between mb-2 drag-handle cursor-move select-none">
                       <div className="text-sm">{w.title} ({w.type})</div>
                       {canEdit && (w as any).status!=='deleted' ? (
                         <button className="text-red-600 text-xs" onClick={async (e) => {
@@ -930,6 +930,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     enableResizing={{ top:true, right:true, bottom:true, left:true, topRight:true, bottomRight:true, bottomLeft:true, topLeft:true }}
                     minWidth={240}
                     minHeight={160}
+                    dragHandleClassName="drag-handle"
                     onDragStart={()=>{ isInteractingRef.current = true; }}
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
                     onDragStop={(e, d) => {
