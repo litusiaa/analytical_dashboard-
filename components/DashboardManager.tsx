@@ -535,6 +535,32 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     return false;
   }
 
+  const GAP = 16;
+
+  function pushDownToResolve(nextLayout: Record<number, { x:number;y:number;width:number;height:number;zIndex:number }>, visible: WidgetItem[]) {
+    // Greedy vertical separation: sort by y, then ensure no intersections by pushing down
+    const order = visible.map((w:any, idx:number) => ({ id: Number(w.id), rect: nextLayout[Number(w.id)] || defaultRect(idx) }));
+    // Iterate until stable or max 10 passes
+    for (let pass = 0; pass < 10; pass++) {
+      let changed = false;
+      order.sort((a,b) => (a.rect.y - b.rect.y) || (a.rect.x - b.rect.x));
+      for (let i = 0; i < order.length; i++) {
+        for (let j = 0; j < order.length; j++) {
+          if (i === j) continue;
+          const A = order[i].rect; const B = order[j].rect;
+          if (intersects(A, B)) {
+            const newY = A.y + A.height + GAP;
+            if (B.y < newY) { B.y = newY; changed = true; }
+          }
+        }
+      }
+      if (!changed) break;
+    }
+    // write back to layout
+    for (const it of order) nextLayout[it.id] = { ...it.rect } as any;
+    return nextLayout;
+  }
+
   // Auto preview when key inputs change
   useEffect(() => {
     (async () => {
@@ -942,23 +968,21 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
                       const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, layout)) {
-                        // отменяем сохранение, возврат к предыдущему состоянию
-                        setLayout({ ...layout });
-                        return;
+                      let next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
+                        // вместо отката — раздвигаем ниже стоящие
+                        next = pushDownToResolve(next, visibleWidgets);
                       }
-                      const next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}
                     onResizeStop={(e, dir, ref, delta, pos) => {
                       isInteractingRef.current = false;
                       const proposal = { x: pos.x, y: pos.y, width: ref.offsetWidth, height: ref.offsetHeight };
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, layout)) {
-                        setLayout({ ...layout });
-                        return;
+                      let next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
+                        next = pushDownToResolve(next, visibleWidgets);
                       }
-                      const next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}>
