@@ -292,6 +292,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [layout, setLayout] = useState<Record<number, { x: number; y: number; width: number; height: number; zIndex: number }>>({});
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const isInteractingRef = useRef(false);
+  const [tab, setTab] = useState<'pub'|'draft'|'trash'>(canEdit ? 'draft' : 'pub');
   const visibleWidgets = useMemo(() => widgets.filter((w: any) => { const st = (w as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st; }), [widgets, tab]);
   const containerHeight = useMemo(() => {
     let h = 300;
@@ -302,7 +303,6 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     });
     return h;
   }, [visibleWidgets, layout]);
-  const [tab, setTab] = useState<'pub'|'draft'|'trash'>(canEdit ? 'draft' : 'pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
   const [showDraftsInWidget, setShowDraftsInWidget] = useState(false);
   const [sourceSheets, setSourceSheets] = useState<Record<number, { title: string; range?: string }[]>>({});
