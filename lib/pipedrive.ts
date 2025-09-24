@@ -1,3 +1,94 @@
+import { setTimeout as delay } from 'timers/promises';
+
+type PipedriveEntity = 'deals' | 'persons' | 'organizations' | 'activities';
+
+function getEnv() {
+  const baseUrl = process.env.PIPEDRIVE_BASE_URL || '';
+  const token = process.env.PIPEDRIVE_API_TOKEN || '';
+  const timeoutMs = Number(process.env.PIPEDRIVE_REQUEST_TIMEOUT_MS || '30000');
+  if (!baseUrl || !token) throw new Error('Pipedrive is not configured. Set PIPEDRIVE_BASE_URL and PIPEDRIVE_API_TOKEN');
+  return { baseUrl: baseUrl.replace(/\/$/, ''), token, timeoutMs };
+}
+
+async function request(path: string, params: Record<string, any> = {}, { retries = 2 }: { retries?: number } = {}) {
+  const { baseUrl, token, timeoutMs } = getEnv();
+  const u = new URL(baseUrl + path);
+  u.searchParams.set('api_token', token);
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) u.searchParams.set(k, v.join(','));
+    else u.searchParams.set(k, String(v));
+  }
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(u.toString(), { headers: { Accept: 'application/json' }, signal: controller.signal } as any);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.success === false) {
+      const err = new Error(json?.error || json?.message || `Pipedrive error ${res.status}`);
+      (err as any).status = res.status;
+      throw err;
+    }
+    return json;
+  } catch (e) {
+    if (retries > 0) { await delay(500); return request(path, params, { retries: retries - 1 }); }
+    throw e;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+export async function pipedriveList(entity: PipedriveEntity, params: Record<string, any> = {}) {
+  // Basic list with pagination; return { items, additional }
+  const json = await request(`/${entity}`, params);
+  const items = Array.isArray(json?.data) ? json.data : (json?.data?.items || []);
+  const additional = json?.additional_data || {};
+  return { items, additional };
+}
+
+export function inferType(value: any): 'number'|'date'|'boolean'|'string' {
+  if (value === null || value === undefined || value === '') return 'string';
+  if (typeof value === 'number') return 'number';
+  const s = String(value).trim();
+  if (/^(true|false)$/i.test(s)) return 'boolean';
+  const n = Number(s.replace(',', '.'));
+  if (!Number.isNaN(n) && (/^-?\d+(?:[\.,]\d+)?$/.test(s))) return 'number';
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) return 'date';
+  return 'string';
+}
+
+export function buildColumnsFromItems(items: any[]): { key: string; type: string }[] {
+  const first = items?.[0] || {};
+  const keys = Object.keys(first);
+  const cols: { key: string; type: string }[] = [];
+  for (const k of keys) {
+    let t = 'string';
+    for (let i = 0; i < Math.min(items.length, 50); i++) {
+      const vt = inferType(items[i]?.[k]);
+      if (vt !== 'string') { t = vt; break; }
+    }
+    cols.push({ key: k, type: t });
+  }
+  return cols;
+}
+
+export async function pipedrivePreview(entity: PipedriveEntity, config: Record<string, any> = {}, limit = 5) {
+  const params: Record<string, any> = { limit };
+  if (config?.savedFilterId) params.filter_id = config.savedFilterId;
+  if (config?.pipelineId) params.pipeline_id = config.pipelineId;
+  if (config?.stageIds && Array.isArray(config.stageIds)) params.stage_id = config.stageIds.join(',');
+  if (config?.ownerIds && Array.isArray(config.ownerIds)) params.user_id = config.ownerIds.join(',');
+  // date range is entity-specific; we include generic since not all endpoints support
+  if (config?.dateFrom && config?.dateTo && config?.dateField) {
+    params[config.dateField] = `${config.dateFrom},${config.dateTo}`;
+  }
+  const { items } = await pipedriveList(entity, params);
+  const columns = buildColumnsFromItems(items);
+  const sample = items.slice(0, limit);
+  return { columns, sample };
+}
+
 import { z } from 'zod';
 
 const BASE_URL = process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedrive.com/v1';

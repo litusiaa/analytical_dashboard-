@@ -104,6 +104,41 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
       return NextResponse.json({ id: link.id }, { status: 201 });
     }
 
+    // Create Pipedrive source
+    if (body?.type === 'pipedrive') {
+      const { name, entity, config } = body as { name?: string; entity?: string; config?: any };
+      const autoName = name && String(name).trim().length > 0 ? name : `Pipedrive — ${String(entity || 'deals')}`;
+      const result = await prisma.$transaction(async (tx) => {
+        const col: any[] = (await tx.$queryRawUnsafe(
+          "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'DataSource' AND column_name = 'status' LIMIT 1"
+        )) as any[];
+        const hasStatus = Array.isArray(col) && col.length > 0;
+        let ds: any;
+        try {
+          ds = await tx.dataSource.create({ data: hasStatus ? ({ type: 'pipedrive', name: autoName, status: 'draft' } as any) : ({ type: 'pipedrive', name: autoName }) });
+        } catch {
+          // legacy raw insert
+          const rows: any[] = (await tx.$queryRawUnsafe(
+            `INSERT INTO "DataSource" ("type","name") VALUES ($1,$2) RETURNING "id","name"`,
+            'pipedrive', autoName
+          )) as any[];
+          const row = rows?.[0] ?? rows; ds = { id: row.id, name: row.name };
+        }
+        const dsId: bigint = typeof ds.id === 'bigint' ? ds.id : BigInt(String(ds.id));
+        // Persist entity/config in a compatible place if schema lacks JSON columns — store as JSON string in description
+        try {
+          await tx.dataSource.update({ where: { id: dsId }, data: { description: JSON.stringify({ entity, config }) } as any });
+        } catch {}
+        const lcols: any[] = (await tx.$queryRawUnsafe(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='DashboardDataSourceLink' AND column_name IN ('status')"
+        )) as any[];
+        const hasLinkStatus = Array.isArray(lcols) && lcols.some((c: any) => c.column_name === 'status');
+        const link = await tx.dashboardDataSourceLink.create({ data: hasLinkStatus ? ({ dashboard: slug, dataSourceId: dsId, status: 'draft' } as any) : ({ dashboard: slug, dataSourceId: dsId }) });
+        return { ds, link };
+      });
+      return NextResponse.json({ id: Number(result.link.id), dataSourceId: Number(result.ds.id), status: 'draft' }, { status: 201, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+
     if (body?.spreadsheetUrl) {
       // create datasource + optional sheets
       const { name, spreadsheetUrl, sheets } = body as { name?: string; spreadsheetUrl: string; sheets?: Array<{ title?: string; range?: string }> };

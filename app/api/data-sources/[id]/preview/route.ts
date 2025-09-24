@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { readValues } from '@/lib/googleSheets';
+import { pipedrivePreview } from '@/lib/pipedrive';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
@@ -10,9 +11,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const id = BigInt(params.id);
   const ds = await prisma.dataSource.findUnique({ where: { id } });
   if (!ds) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (!sheet) return NextResponse.json({ error: 'sheet is required' }, { status: 400 });
-  if (!ds.spreadsheetId) return NextResponse.json({ error: 'No spreadsheetId set' }, { status: 400 });
   try {
+    if (ds.type === 'pipedrive') {
+      const limit = Number(url.searchParams.get('limit') || '5');
+      let entity = (ds as any).entity as any;
+      let cfg = (ds as any).config as any;
+      if (!entity || !cfg) {
+        try { const parsed = ds?.description ? JSON.parse(String((ds as any).description)) : null; if (parsed) { entity = parsed.entity; cfg = parsed.config; } } catch {}
+      }
+      const data = await pipedrivePreview((entity || 'deals') as any, cfg || {}, limit);
+      return NextResponse.json({ columns: data.columns, sample: data.sample }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+    if (!sheet) return NextResponse.json({ error: 'sheet is required' }, { status: 400 });
+    if (!ds.spreadsheetId) return NextResponse.json({ error: 'No spreadsheetId set' }, { status: 400 });
     const values = await readValues(ds.spreadsheetId, `${sheet}!${range}`);
     const columns = (values[0] || []).map((c: any) => String(c));
     const rows = values.slice(1);

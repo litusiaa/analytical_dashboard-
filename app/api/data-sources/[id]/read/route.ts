@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { readValues } from '@/lib/googleSheets';
+import { pipedriveList, buildColumnsFromItems } from '@/lib/pipedrive';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
@@ -15,7 +16,25 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const id = BigInt(params.id);
   const ds = await prisma.dataSource.findUnique({ where: { id } });
   if (!ds) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (ds.type !== 'google_sheets') return NextResponse.json({ error: 'Unsupported source type' }, { status: 400 });
+  if (ds.type === 'pipedrive') {
+    try {
+      // Pipedrive paging (transparent): use offset/limit as start/limit
+      const start = offset;
+      const limitPD = Math.max(1, Math.min(500, limit));
+      let entity: any = (ds as any).entity; let cfg: any = (ds as any).config;
+      try { if (!entity || !cfg) { const parsed = (ds as any).description ? JSON.parse(String((ds as any).description)) : null; if (parsed) { entity = parsed.entity; cfg = parsed.config; } } } catch {}
+      const json = await pipedriveList(entity || 'deals', { start, limit: limitPD, ...(cfg?.savedFilterId ? { filter_id: cfg.savedFilterId } : {}) });
+      const items = json.items || [];
+      const columns = buildColumnsFromItems(items);
+      const rows = items.map((it: any) => columns.map((c) => it?.[c.key] ?? ''));
+      const payload = { columns: columns.map((c)=>c.key), rows, total: undefined, lastSyncedAt: ds.lastSyncedAt ? ds.lastSyncedAt.toISOString?.() : undefined } as any;
+      return new NextResponse(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    } catch (e: any) {
+      const msg = String(e?.message || e || 'Read error');
+      return NextResponse.json({ error: msg }, { status: (e as any)?.status || 500 });
+    }
+  }
+  // Google Sheets branch
   if (!sheet) return NextResponse.json({ error: 'sheet is required' }, { status: 400 });
   if (!range) return NextResponse.json({ error: 'range is required' }, { status: 400 });
   if (/!/.test(range)) range = range.split('!')[1];
