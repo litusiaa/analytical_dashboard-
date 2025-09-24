@@ -33,7 +33,18 @@ export function EditBanner() {
     <div className="sticky top-0 z-20 bg-yellow-100 text-yellow-900 text-sm px-4 py-2 flex items-center justify-between shadow">
       <div className="flex items-center gap-2"><span className="inline-flex items-center px-2 py-0.5 text-xs bg-purple-200 text-purple-900 rounded">Editing</span><span>Изменения сохраняются как черновик</span> <span className="text-xs text-gray-700">(осталось {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')})</span></div>
       <div className="flex gap-2">
-        <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/draft', { method: 'POST', credentials: 'include' }); location.reload(); }}>Сохранить как черновик</button>
+        <button className="underline" onClick={async () => {
+          try {
+            const payload = (() => {
+              try { const w: any = (window as any); if (w && w.__currentLayout && w.__currentSlug) { return { slug: String(w.__currentSlug), widgets: Object.entries(w.__currentLayout).map(([id, r]: any)=> ({ id: Number(id), ...r })) }; } } catch {}
+              return null;
+            })();
+            if (payload && payload.slug) {
+              await fetch(`/api/dashboards/${payload.slug}/layout/draft`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgets: payload.widgets }), credentials: 'include' });
+            }
+          } catch {}
+          await fetch(location.pathname.replace(/\/$/, '') + '/draft', { method: 'POST', credentials: 'include' }); location.reload();
+        }}>Сохранить как черновик</button>
         <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/publish', { method: 'POST', credentials: 'include' }); location.reload(); }}>Опубликовать</button>
         <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/discard', { method: 'POST', credentials: 'include' }); location.reload(); }}>Отменить изменения</button>
         <button className="underline" onClick={extend}>Продлить</button>

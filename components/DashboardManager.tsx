@@ -487,6 +487,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         for (const w of data.widgets || []) next[Number(w.widgetId)] = { x: w.x, y: w.y, width: w.width, height: w.height, zIndex: w.zIndex ?? 0 };
         setLayout(next);
         setLayoutLoaded(true);
+        if (typeof window !== 'undefined') {
+          (window as any).__currentLayout = next;
+          (window as any).__currentSlug = slug;
+        }
       } catch { setLayoutLoaded(true); }
     }
     loadLayout();
@@ -505,6 +509,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         const payload = { widgets: Object.entries(next).map(([id, r]) => ({ id: Number(id), ...r })) };
         await fetch(`/api/dashboards/${slug}/layout/draft`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'include' });
       }, 400);
+      try { if (typeof window !== 'undefined') { (window as any).__currentLayout = next; (window as any).__currentSlug = slug; } } catch {}
     };
   }, [slug, canEdit]);
 
@@ -886,7 +891,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         {widgets.length === 0 ? (
           <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
         ) : (
-          <div className="relative border rounded" style={{ height: containerHeight }}>
+          <div className="relative border rounded" style={{ height: Math.max(containerHeight, 1200) }}>
             {visibleWidgets
               .map((w, idx) => {
                 const r = layout[Number(w.id)] || defaultRect(idx);
@@ -927,6 +932,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   <Rnd key={w.id}
                     size={{ width: r.width, height: r.height }}
                     position={{ x: r.x, y: r.y }}
+                    bounds="parent"
                     enableResizing={{ top:true, right:true, bottom:true, left:true, topRight:true, bottomRight:true, bottomLeft:true, topLeft:true }}
                     minWidth={240}
                     minHeight={160}
@@ -942,6 +948,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         return;
                       }
                       const next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}
                     onResizeStop={(e, dir, ref, delta, pos) => {
@@ -952,6 +959,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         return;
                       }
                       const next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}>
                     {content}
