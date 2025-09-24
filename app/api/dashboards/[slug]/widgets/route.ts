@@ -39,9 +39,10 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400 });
     const body = await req.json().catch(() => ({}));
     const { type, dataSourceId, sheetTitle, range, title, options, mapping } = body || {};
-    if (!['table','line','bar','pie'].includes(type)) return NextResponse.json({ message: 'Unsupported widget type' }, { status: 400 });
+    if (!['table','line','bar','pie','calendar'].includes(type)) return NextResponse.json({ message: 'Unsupported widget type' }, { status: 400 });
     if (!dataSourceId || !sheetTitle) return NextResponse.json({ message: 'dataSourceId and sheetTitle are required' }, { status: 400 });
-    // Validate link ownership
+    // For non-calendar widgets, validate dataSource ownership
+    if (type !== 'calendar') {
     const link = await prisma.dashboardDataSourceLink.findFirst({ where: { dashboard: slug, dataSourceId: BigInt(dataSourceId) }, include: { dataSource: true } });
     if (!link || !link.dataSource) return NextResponse.json({ message: 'Data source not linked to this dashboard' }, { status: 400 });
     const spreadsheetId = link.dataSource.spreadsheetId;
@@ -61,8 +62,8 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     const hasStatus = await prisma.$queryRawUnsafe<any[]>(
       "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name='status' LIMIT 1"
     );
-    const baseCfg: any = { dataSourceId, sheetTitle, range: range || 'A1:Z', options: options || { pageSize: 50 } };
-    if (type !== 'table') baseCfg.mapping = mapping || {};
+    const baseCfg: any = type==='calendar' ? (options || {}) : { dataSourceId, sheetTitle, range: range || 'A1:Z', options: options || { pageSize: 50 } };
+    if (type !== 'table' && type !== 'calendar') baseCfg.mapping = mapping || {};
     const data: any = { dashboard: slug, type, title: title || (type==='table' ? `Table — ${sheetTitle}` : `${type[0].toUpperCase()}${type.slice(1)} — ${sheetTitle}`), dataSourceId: BigInt(dataSourceId), config: baseCfg };
     if (Array.isArray(hasStatus) && hasStatus.length > 0) data.status = 'draft';
     const item = await prisma.widget.create({ data });
