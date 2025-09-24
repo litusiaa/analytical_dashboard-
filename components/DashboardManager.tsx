@@ -240,6 +240,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [openAddSheets, setOpenAddSheets] = useState(false);
   const [openAddPipedrive, setOpenAddPipedrive] = useState(false);
   const [openAddWidget, setOpenAddWidget] = useState(false);
+  const [openAddCalendar, setOpenAddCalendar] = useState(false);
 
   // Add Source form
   const [srcName, setSrcName] = useState('');
@@ -312,6 +313,18 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [calMode, setCalMode] = useState<'day'|'week'|'month'>('day');
   const [calPreview, setCalPreview] = useState<any[]>([]);
   const [calLoading, setCalLoading] = useState(false);
+
+  useEffect(() => {
+    if (!openAddCalendar && !openAddWidget) return;
+    (async () => {
+      try {
+        if (calList.length === 0) {
+          const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
+          if (r.ok) setCalList(await r.json());
+        }
+      } catch {}
+    })();
+  }, [openAddCalendar, openAddWidget]);
 
   async function refresh() {
     const [l, w] = await Promise.all([
@@ -617,6 +630,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         <div className="flex gap-2">
           <Button onClick={() => setOpenAddSheets(true)}>Добавить таблицу (Google Sheets)</Button>
           <Button onClick={() => setOpenAddPipedrive(true)} variant="secondary">Добавить источник Pipedrive</Button>
+          <Button onClick={() => setOpenAddCalendar(true)} variant="secondary">Добавить Google Calendar</Button>
           <Button variant="secondary" onClick={() => setOpenAddWidget(true)}>Добавить виджет</Button>
         </div>
       ) : null}
@@ -862,6 +876,75 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
             <Button onClick={handleAddSource} disabled={loading1 || (!srcUrl || Object.keys(selected).length === 0)}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохраняем…</span></>) : 'Сохранить'}</Button>
           </div>
           <div className="text-xs text-gray-500">Дайте доступ редактора сервисному аккаунту: переменная GOOGLE_SHEETS_CLIENT_EMAIL</div>
+        </div>
+      </Modal>
+
+      <Modal open={canEdit && openAddCalendar} onClose={() => setOpenAddCalendar(false)} title="Добавить Google Calendar">
+        <div className="space-y-3">
+          <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Период:</span>
+              <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='day'} onChange={()=> setCalMode('day')} /> День</label>
+              <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='week'} onChange={()=> setCalMode('week')} /> Неделя</label>
+              <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='month'} onChange={()=> setCalMode('month')} /> Месяц</label>
+            </div>
+            <div>
+              <div className="mb-1">Люди (календарь)</div>
+              <Input value={calQuery} onChange={(e)=> setCalQuery(e.target.value)} placeholder="Поиск по имени/email" />
+              <div className="mt-1 flex gap-1 flex-wrap max-h-48 overflow-auto">
+                {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
+                  const sel = calSelected.has(c.id);
+                  return (
+                    <button key={c.id} type="button" title={c.id} className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
+                      const next = new Set(calSelected); if (sel) next.delete(c.id); else next.add(c.id); setCalSelected(next);
+                    }}>{c.summary || c.id}</button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="font-medium">Превью (сегодня + 7 дней)</div>
+              <button className="underline" onClick={async ()=>{
+                try {
+                  setCalLoading(true);
+                  const ids = Array.from(calSelected).join(',');
+                  const now = new Date();
+                  const timeMin = now.toISOString();
+                  const timeMax = new Date(now.getTime() + 7*24*3600*1000).toISOString();
+                  const ev = await fetch(`/api/calendar/events?calendarId=${encodeURIComponent(ids)}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`, { cache: 'no-store' });
+                  const j = await ev.json();
+                  if (ev.ok) setCalPreview(j.items||[]); else alert(j?.error||'Ошибка');
+                } finally { setCalLoading(false); }
+              }}>Обновить превью</button>
+            </div>
+            {calLoading ? <div className="text-gray-500">Загрузка…</div> : (
+              <div className="space-y-1 max-h-56 overflow-auto">
+                {calPreview.length===0 ? <div className="text-gray-500">Нет событий</div> : calPreview.map((e,i)=> (
+                  <div key={i} className="border rounded p-1 bg-white">
+                    <div className="text-[12px] text-gray-600">{new Date(e.start).toLocaleString('ru-RU')}</div>
+                    <div className="text-sm">{e.summary || 'Без названия'}</div>
+                    <div className="text-[12px] text-gray-500">{e.organizer || ''}</div>
+                    {e.hangoutLink ? <a className="text-[12px] text-blue-600 underline" href={e.hangoutLink} target="_blank" rel="noreferrer">Ссылка</a> : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setOpenAddCalendar(false)}>Отмена</Button>
+            <Button onClick={async ()=>{
+              try {
+                setLoading2(true);
+                const payload = { type: 'calendar', title: 'Календарь', options: { calendars: Array.from(calSelected), mode: calMode } } as any;
+                const res = await fetch(`/api/dashboards/${slug}/widgets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'include' });
+                if (!res.ok) throw new Error('Не удалось создать календарь');
+                await refresh();
+                setTab('draft');
+                setOpenAddCalendar(false);
+                setCalSelected(new Set()); setCalPreview([]);
+              } catch (e: any) { alert(e.message||'Ошибка'); } finally { setLoading2(false); }
+            }}>Сохранить</Button>
+          </div>
         </div>
       </Modal>
 
