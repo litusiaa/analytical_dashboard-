@@ -134,6 +134,19 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
         )) as any[];
         const hasLinkStatus = Array.isArray(lcols) && lcols.some((c: any) => c.column_name === 'status');
         const link = await tx.dashboardDataSourceLink.create({ data: hasLinkStatus ? ({ dashboard: slug, dataSourceId: dsId, status: 'draft' } as any) : ({ dashboard: slug, dataSourceId: dsId }) });
+        // Auto-create a table widget for Pipedrive (no sheet/range)
+        const hasWidgetStatus = await tx.$queryRawUnsafe<any[]>(
+          "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name='status' LIMIT 1"
+        );
+        const widgetData: any = {
+          dashboard: slug,
+          type: 'table',
+          title: `Table — ${String(entity || 'pipedrive')}`,
+          dataSourceId: dsId,
+          config: { dataSourceId: Number(dsId), options: { pageSize: 50 } },
+        };
+        if (Array.isArray(hasWidgetStatus) && hasWidgetStatus.length > 0) widgetData.status = 'draft';
+        await tx.widget.create({ data: widgetData });
         return { ds, link };
       });
       return NextResponse.json({ id: Number(result.link.id), dataSourceId: Number(result.ds.id), status: 'draft' }, { status: 201, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
