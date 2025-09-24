@@ -149,6 +149,7 @@ model Widget {
   updatedAt    DateTime @updatedAt
 
   dataSource   DataSource? @relation(fields: [dataSourceId], references: [id])
+  layouts      WidgetLayout[]
 
   @@index([dashboard])
 
