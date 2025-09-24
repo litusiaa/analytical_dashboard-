@@ -316,6 +316,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [calError, setCalError] = useState<string>('');
   const CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID) as string | undefined;
   const [hasClientId, setHasClientId] = useState<boolean>(Boolean(CLIENT_ID));
+  const [calConfigChecked, setCalConfigChecked] = useState<boolean>(false);
 
   useEffect(() => {
     if (!openAddCalendar && !openAddWidget) return;
@@ -326,6 +327,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           const c = await fetch('/api/calendar/config', { cache: 'no-store' });
           const j = await c.json(); setHasClientId(Boolean(j?.hasClientId));
         } catch { setHasClientId(Boolean(CLIENT_ID)); }
+        finally { setCalConfigChecked(true); }
         if (calList.length === 0) {
           const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
           const j = await r.json();
@@ -901,7 +903,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               <div className="mb-1">Люди (календарь)</div>
               <Input value={calQuery} onChange={(e)=> setCalQuery(e.target.value)} placeholder="Поиск по имени/email" />
               {calError ? <div className="text-[12px] text-red-700 mt-1">{calError}</div> : null}
-              {!hasClientId ? <div className="text-[12px] text-red-700 mt-1">Missing ENV GOOGLE_CALENDAR_CLIENT_ID</div> : null}
+              {calConfigChecked && !hasClientId ? <div className="text-[12px] text-red-700 mt-1">Missing ENV GOOGLE_CALENDAR_CLIENT_ID</div> : null}
               <div className="mt-1 max-h-48 overflow-auto border rounded">
                 <ul className="text-sm">
                   {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
