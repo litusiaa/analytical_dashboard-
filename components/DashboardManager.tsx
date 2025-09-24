@@ -976,7 +976,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 return (<option key={s.id} value={s.id}>{label}{s.status==='draft'?' — Draft':''}</option>);
               })}
             </select>
-            ) : null}
+            ) : (
+              <div className="text-xs text-gray-600">Календари выбираются выше (в настройках виджета)</div>
+            )}
           </label>
           {wType!=='calendar' && wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 0 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 0) ? (
             <label className="block text-sm">Лист

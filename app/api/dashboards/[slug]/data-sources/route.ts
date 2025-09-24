@@ -83,6 +83,25 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     }
     items = result as any[];
   }
+  // Also expose Calendar as a virtual source based on calendar widgets
+  try {
+    const wcols: any[] = await prisma.$queryRawUnsafe(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='Widget' AND column_name IN ('status','type','dashboard')"
+    );
+    const hasWStatus = Array.isArray(wcols) && wcols.some((c: any) => c.column_name === 'status');
+    const whereW: any = { dashboard: slug, type: 'calendar' } as any;
+    if (!canEdit && hasWStatus) whereW.status = 'published' as any; else if (hasWStatus) whereW.status = { in: ['draft','published'] } as any;
+    const cals = await prisma.widget.findMany({ where: whereW, select: { id: true, title: true, ...(hasWStatus ? { status: true } : {}) } as any });
+    for (const w of cals as any[]) {
+      items.push({
+        id: `cal-${String(w.id)}`,
+        dataSourceId: `cal-${String(w.id)}`,
+        status: hasWStatus ? (w.status || 'draft') : undefined,
+        dataSource: { id: `cal-${String(w.id)}`, name: w.title || 'Календарь', type: 'calendar', status: hasWStatus ? (w.status || 'draft') : undefined },
+        sheets: [],
+      });
+    }
+  } catch {}
   const { serializeJsonSafe } = await import('@/lib/json');
   return NextResponse.json(
     { items: serializeJsonSafe(items) },
