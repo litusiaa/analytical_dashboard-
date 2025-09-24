@@ -237,10 +237,11 @@ function CalendarWidgetPreview({ config }: { config: any }) {
     (async () => {
       try {
         setLoading(true); setError(null);
-        const ids = Array.isArray(config?.calendars) ? config.calendars.join(',') : '';
+        const opts = (config && (config.options ? config.options : config)) || {};
+        const ids = Array.isArray(opts.calendars) ? opts.calendars.join(',') : '';
         const now = new Date();
         const timeMin = now.toISOString();
-        const mode = (config?.mode || 'day') as 'day'|'week'|'month';
+        const mode = (opts.mode || 'day') as 'day'|'week'|'month';
         const days = mode === 'day' ? 1 : mode === 'week' ? 7 : 30;
         const timeMax = new Date(now.getTime() + days*24*3600*1000).toISOString();
         const r = await fetch(`/api/calendar/events?calendarId=${encodeURIComponent(ids)}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`, { cache: 'no-store' });
