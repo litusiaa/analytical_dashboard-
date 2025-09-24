@@ -171,6 +171,26 @@ model DataSourceSheet {
   @@index([dataSourceId])
 }
 
+enum LayoutKind {
+  draft
+  published
+}
+
+model WidgetLayout {
+  id        BigInt     @id @default(autoincrement())
+  widgetId  BigInt
+  widget    Widget     @relation(fields: [widgetId], references: [id])
+  x         Int
+  y         Int
+  width     Int
+  height    Int
+  zIndex    Int        @default(0)
+  kind      LayoutKind
+  updatedAt DateTime   @updatedAt
+
+  @@unique([widgetId, kind])
+}
+
 model edit_sessions {
   id          BigInt   @id @default(autoincrement())
   token_hash  String   @unique

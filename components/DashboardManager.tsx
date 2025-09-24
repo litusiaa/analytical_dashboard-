@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Rnd } from 'react-rnd';
 import { Button } from '@/components/Button';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/Input';
@@ -288,6 +289,9 @@ type SheetMeta = { title: string; rangeGuess: string };
 export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail, canEdit }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string; canEdit: boolean }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
+  const [layout, setLayout] = useState<Record<number, { x: number; y: number; width: number; height: number; zIndex: number }>>({});
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const isInteractingRef = useRef(false);
   const [tab, setTab] = useState<'pub'|'draft'|'trash'>(canEdit ? 'draft' : 'pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
   const [showDraftsInWidget, setShowDraftsInWidget] = useState(false);
@@ -460,6 +464,47 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  // Load layout (draft in edit, published in view)
+  useEffect(() => {
+    let aborted = false;
+    async function loadLayout() {
+      try {
+        const res = await fetch(`/api/dashboards/${slug}/layout`, { cache: 'no-store' });
+        const data = await res.json();
+        if (aborted) return;
+        const next: any = {};
+        for (const w of data.widgets || []) next[Number(w.widgetId)] = { x: w.x, y: w.y, width: w.width, height: w.height, zIndex: w.zIndex ?? 0 };
+        setLayout(next);
+        setLayoutLoaded(true);
+      } catch { setLayoutLoaded(true); }
+    }
+    loadLayout();
+    const int = setInterval(() => { if (!isInteractingRef.current) loadLayout(); }, canEdit ? 4000 : 10000);
+    return () => { aborted = true; clearInterval(int); };
+  }, [slug, canEdit]);
+
+  // Debounced save of draft layout
+  const saveLayoutDebounced = useMemo(() => {
+    let timer: any;
+    return (next: Record<number, any>) => {
+      setLayout(next);
+      if (!canEdit) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const payload = { widgets: Object.entries(next).map(([id, r]) => ({ id: Number(id), ...r })) };
+        await fetch(`/api/dashboards/${slug}/layout/draft`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'include' });
+      }, 400);
+    };
+  }, [slug, canEdit]);
+
+  function defaultRect(index: number): { x: number; y: number; width: number; height: number; zIndex: number } {
+    const col = index % 2; const row = Math.floor(index / 2);
+    const width = 560; const height = 320; const gap = 16;
+    const x = col * (width + gap);
+    const y = row * (height + gap);
+    return { x, y, width, height, zIndex: 0 };
+  }
 
   // Auto preview when key inputs change
   useEffect(() => {
@@ -800,11 +845,24 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       </div>
 
       <div className="mt-6">
-        <div className="text-sm font-medium mb-2">Виджеты</div>
+        <div className="text-sm font-medium mb-2 flex items-center gap-2">
+          <span>Виджеты</span>
+          {canEdit ? (
+            <>
+              <button className="text-xs underline" onClick={async ()=>{ const res = await fetch(`/api/dashboards/${slug}/layout/reset`, { method: 'POST', credentials: 'include' }); if (res.ok) {
+                const d = await fetch(`/api/dashboards/${slug}/layout`, { cache: 'no-store' }).then(r=>r.json());
+                const next:any={}; for (const w of d.widgets||[]) next[Number(w.widgetId)]={ x:w.x,y:w.y,width:w.width,height:w.height,zIndex:w.zIndex||0};
+                setLayout(next);
+              } }}>Reset</button>
+              <button className="text-xs underline" onClick={async ()=>{ await fetch(`/api/dashboards/${slug}/layout/publish`, { method: 'POST', credentials: 'include' }); }}>Publish</button>
+              <button className="text-xs underline" onClick={async ()=>{ const body = { snap: 16, resolveOverlaps: true, compact: true }; await fetch(`/api/dashboards/${slug}/layout/auto`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body), credentials: 'include' }); const d = await fetch(`/api/dashboards/${slug}/layout`, { cache: 'no-store' }).then(r=>r.json()); const next:any={}; for (const w of d.widgets||[]) next[Number(w.widgetId)]={ x:w.x,y:w.y,width:w.width,height:w.height,zIndex:w.zIndex||0}; setLayout(next); }}>Auto layout</button>
+            </>
+          ) : null}
+        </div>
         {widgets.length === 0 ? (
           <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
         ) : (
-          <ul className="space-y-2">
+          <div className="relative min-h-[200px] border rounded">
             {widgets
               .filter((w: any) => {
                 const st = (w as any).status;
@@ -812,61 +870,63 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 if (tab==='draft') return st==='draft';
                 return st==='published' || !st;
               })
-              .map((w) => (
-              <li key={w.id} className="border rounded p-2 text-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div>{w.title} ({w.type})</div>
-                  {canEdit && (w as any).status!=='deleted' ? (
-                    <button className="text-red-600 text-xs" onClick={async () => {
-                      if (!confirm('Переместить виджет в корзину?')) return;
-                      await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
-                      setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
-                      await refresh();
-                    }}>Удалить</button>
-                  ) : null}
-                  {canEdit && (w as any).status!=='deleted' ? (
-                    <>
-                      {(w as any).status==='draft' ? (
-                        <button className="text-xs text-green-700 ml-2" onClick={async ()=>{
-                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish' }), credentials: 'include' });
+              .map((w, idx) => {
+                const r = layout[Number(w.id)] || defaultRect(idx);
+                const content = (
+                  <div className="w-full h-full p-2 bg-white border rounded shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm">{w.title} ({w.type})</div>
+                      {canEdit && (w as any).status!=='deleted' ? (
+                        <button className="text-red-600 text-xs" onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm('Переместить виджет в корзину?')) return;
+                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
+                          setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
                           await refresh();
-                        }}>Опубликовать</button>
-                      ) : (w as any).status==='published' ? (
-                        <button className="text-xs text-amber-700 ml-2" onClick={async ()=>{
-                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpublish' }), credentials: 'include' });
-                          setWidgets((prev)=>prev.map((x:any)=> x.id===w.id ? { ...x, status: 'draft' } : x));
-                          setTab('draft');
-                          await refresh();
-                        }}>В черновик</button>
+                        }}>Удалить</button>
                       ) : null}
-                    </>
-                  ) : null}
-                  {canEdit && (w as any).status==='deleted' ? (
-                    <div className="flex items-center gap-2">
-                      <button className="text-xs text-blue-600" onClick={async ()=>{
-                        await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore' }), credentials: 'include' });
-                        setWidgets((prev)=>prev.map((x:any)=> x.id===w.id ? { ...x, status: 'draft' } : x));
-                        await refresh();
-                      }}>Восстановить</button>
-                      <button className="text-xs text-red-700" onClick={async ()=>{
-                        if (!confirm('Удалить виджет навсегда?')) return;
-                        await fetch(`/api/dashboards/${slug}/widgets/${w.id}?hard=true`, { method: 'DELETE', credentials: 'include' });
-                        setWidgets((prev)=>prev.filter((x)=> x.id !== w.id));
-                        await refresh();
-                      }}>Удалить навсегда</button>
                     </div>
-                  ) : null}
-                </div>
-                {w.type === 'table' ? (
-                  <TableWidgetPreview canEdit={canEdit} slug={slug} widget={w} dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
-                ) : (w.type==='line' || w.type==='bar' || w.type==='pie') ? (
-                  <ChartWidgetPreview type={w.type as any} config={(w as any).config} />
-                ) : w.type==='calendar' ? (
-                  <CalendarWidgetPreview config={(w as any).config} />
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                    {w.type === 'table' ? (
+                      <TableWidgetPreview canEdit={canEdit} slug={slug} widget={w} dataSourceId={(w as any).config?.dataSourceId || 0} sheetTitle={(w as any).config?.sheetTitle || ''} range={(w as any).config?.range || 'A1:Z'} pageSize={(w as any).config?.options?.pageSize || 1000} />
+                    ) : (w.type==='line' || w.type==='bar' || w.type==='pie') ? (
+                      <ChartWidgetPreview type={w.type as any} config={(w as any).config} />
+                    ) : w.type==='calendar' ? (
+                      <CalendarWidgetPreview config={(w as any).config} />
+                    ) : null}
+                    {canEdit ? (
+                      <div className="absolute right-2 top-2 text-[10px] bg-black/60 text-white px-1 rounded">{r.x},{r.y} · {r.width}×{r.height}</div>
+                    ) : null}
+                  </div>
+                );
+                if (!canEdit) {
+                  return (
+                    <div key={w.id} style={{ position:'absolute', left:r.x, top:r.y, width:r.width, height:r.height, zIndex:r.zIndex }}>
+                      {content}
+                    </div>
+                  );
+                }
+                return (
+                  <Rnd key={w.id}
+                    size={{ width: r.width, height: r.height }}
+                    position={{ x: r.x, y: r.y }}
+                    bounds="parent"
+                    onDragStart={()=>{ isInteractingRef.current = true; }}
+                    onResizeStart={()=>{ isInteractingRef.current = true; }}
+                    onDragStop={(e, d) => {
+                      isInteractingRef.current = false;
+                      const next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
+                      saveLayoutDebounced(next);
+                    }}
+                    onResizeStop={(e, dir, ref, delta, pos) => {
+                      isInteractingRef.current = false;
+                      const next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
+                      saveLayoutDebounced(next);
+                    }}>
+                    {content}
+                  </Rnd>
+                );
+              })}
+          </div>
         )}
       </div>
       <Modal open={canEdit && openAddSheets} onClose={() => setOpenAddSheets(false)} title="Добавить таблицу (Google Sheets)">
