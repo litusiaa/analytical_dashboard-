@@ -292,6 +292,16 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [layout, setLayout] = useState<Record<number, { x: number; y: number; width: number; height: number; zIndex: number }>>({});
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const isInteractingRef = useRef(false);
+  const visibleWidgets = useMemo(() => widgets.filter((w: any) => { const st = (w as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st; }), [widgets, tab]);
+  const containerHeight = useMemo(() => {
+    let h = 300;
+    visibleWidgets.forEach((w: any, idx: number) => {
+      const id = Number((w as any).id);
+      const r = layout[id] || defaultRect(idx);
+      h = Math.max(h, (r.y || 0) + (r.height || 0) + 16);
+    });
+    return h;
+  }, [visibleWidgets, layout]);
   const [tab, setTab] = useState<'pub'|'draft'|'trash'>(canEdit ? 'draft' : 'pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
   const [showDraftsInWidget, setShowDraftsInWidget] = useState(false);
@@ -876,14 +886,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         {widgets.length === 0 ? (
           <div className="text-sm text-gray-500">Нет виджетов, создайте первый</div>
         ) : (
-          <div className="relative min-h-[200px] border rounded">
-            {widgets
-              .filter((w: any) => {
-                const st = (w as any).status;
-                if (tab==='trash') return st==='deleted';
-                if (tab==='draft') return st==='draft';
-                return st==='published' || !st;
-              })
+          <div className="relative border rounded" style={{ height: containerHeight }}>
+            {visibleWidgets
               .map((w, idx) => {
                 const r = layout[Number(w.id)] || defaultRect(idx);
                 const content = (
@@ -923,16 +927,15 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                   <Rnd key={w.id}
                     size={{ width: r.width, height: r.height }}
                     position={{ x: r.x, y: r.y }}
-                    bounds="parent"
+                    enableResizing={{ top:true, right:true, bottom:true, left:true, topRight:true, bottomRight:true, bottomLeft:true, topLeft:true }}
+                    minWidth={240}
+                    minHeight={160}
                     onDragStart={()=>{ isInteractingRef.current = true; }}
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
                       const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
-                      const visible = widgets.filter((vw: any) => {
-                        const st = (vw as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st;
-                      });
-                      if (willCollide(proposal, Number((w as any).id), visible, layout)) {
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, layout)) {
                         // отменяем сохранение, возврат к предыдущему состоянию
                         setLayout({ ...layout });
                         return;
@@ -943,10 +946,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     onResizeStop={(e, dir, ref, delta, pos) => {
                       isInteractingRef.current = false;
                       const proposal = { x: pos.x, y: pos.y, width: ref.offsetWidth, height: ref.offsetHeight };
-                      const visible = widgets.filter((vw: any) => {
-                        const st = (vw as any).status; if (tab==='trash') return st==='deleted'; if (tab==='draft') return st==='draft'; return st==='published' || !st;
-                      });
-                      if (willCollide(proposal, Number((w as any).id), visible, layout)) {
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, layout)) {
                         setLayout({ ...layout });
                         return;
                       }
