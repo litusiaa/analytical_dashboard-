@@ -231,7 +231,7 @@ type SheetMeta = { title: string; rangeGuess: string };
 export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEmail, canEdit }: { slug: string; initialLinks: LinkItem[]; initialWidgets: WidgetItem[]; serviceEmail: string; canEdit: boolean }) {
   const [links, setLinks] = useState<LinkItem[]>(initialLinks);
   const [widgets, setWidgets] = useState<WidgetItem[]>(initialWidgets);
-  const [tab, setTab] = useState<'pub'|'draft'|'trash'>('pub');
+  const [tab, setTab] = useState<'pub'|'draft'|'trash'>(canEdit ? 'draft' : 'pub');
   const [allSources, setAllSources] = useState<DataSource[]>([]);
   const [showDraftsInWidget, setShowDraftsInWidget] = useState(false);
   const [sourceSheets, setSourceSheets] = useState<Record<number, { title: string; range?: string }[]>>({});
