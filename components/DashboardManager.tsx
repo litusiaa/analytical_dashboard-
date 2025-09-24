@@ -293,7 +293,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   // Add Widget form
   const [wTitle, setWTitle] = useState('Новый виджет');
-  const [wType, setWType] = useState<'table' | 'line' | 'bar' | 'pie'>('table');
+  const [wType, setWType] = useState<'table' | 'line' | 'bar' | 'pie' | 'calendar'>('table');
   const [wDataSourceId, setWDataSourceId] = useState<number | undefined>(undefined);
   const [wSheetTitle, setWSheetTitle] = useState<string>('');
   const [wRange, setWRange] = useState('A1:Z');
@@ -305,6 +305,13 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [secret2, setSecret2] = useState('');
   const [loading2, setLoading2] = useState(false);
   const [err2, setErr2] = useState<string | null>(null);
+  // Calendar widget state
+  const [calList, setCalList] = useState<Array<{ id: string; summary: string; primary?: boolean; accessRole?: string }>>([]);
+  const [calQuery, setCalQuery] = useState('');
+  const [calSelected, setCalSelected] = useState<Set<string>>(()=> new Set());
+  const [calMode, setCalMode] = useState<'day'|'week'|'month'>('day');
+  const [calPreview, setCalPreview] = useState<any[]>([]);
+  const [calLoading, setCalLoading] = useState(false);
 
   async function refresh() {
     const [l, w] = await Promise.all([
@@ -524,7 +531,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     try {
       // Validate
       const errs: any = {};
-      if (wType==='line' || wType==='bar') {
+      if (wType==='calendar') {
+        // no required fields besides calendars (optional)
+      } else if (wType==='line' || wType==='bar') {
         if (!wMapping.x) errs.x = 'Укажите ось X';
         if (!wMapping.y) errs.y = 'Укажите метрику Y';
       } else if (wType==='pie') {
@@ -533,10 +542,23 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       }
       setFieldErrors(errs);
       if (Object.keys(errs).length>0) { throw new Error('Заполните обязательные поля'); }
+      const payload: any = (wType==='calendar') ? {
+        type: 'calendar',
+        title: wTitle,
+        options: { calendars: Array.from(calSelected), mode: calMode }
+      } : {
+        type: wType,
+        title: wTitle,
+        dataSourceId: wDataSourceId,
+        sheetTitle: wSheetTitle,
+        range: wRange,
+        options: { pageSize: 50 },
+        mapping: wMapping
+      };
       const res = await fetch(`/api/dashboards/${slug}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: wType, title: wTitle, dataSourceId: wDataSourceId, sheetTitle: wSheetTitle, range: wRange, options: { pageSize: 50 }, mapping: wMapping }),
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Не удалось создать виджет');
@@ -545,6 +567,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       await refresh();
       setOpenAddWidget(false);
       setWTitle('Новый виджет'); setWType('table'); setWRange('A1:Z'); setWSheetTitle(''); setSecret2(''); setWMapping({});
+      setCalSelected(new Set()); setCalMode('day'); setCalPreview([]);
     } catch (e: any) {
       setErr2(e.message || 'Ошибка');
     } finally {
@@ -853,11 +876,69 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
             <option value="line">Линейный график</option>
             <option value="bar">Столбчатая диаграмма</option>
             <option value="pie">Круговая диаграмма</option>
+            <option value="calendar">Календарь</option>
           </select>
+          {wType==='calendar' ? (
+            <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Период:</span>
+                <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='day'} onChange={()=> setCalMode('day')} /> День</label>
+                <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='week'} onChange={()=> setCalMode('week')} /> Неделя</label>
+                <label className="inline-flex items-center gap-1"><input type="radio" checked={calMode==='month'} onChange={()=> setCalMode('month')} /> Месяц</label>
+              </div>
+              <div className="mt-2">
+                <div className="mb-1">Люди (календарь)</div>
+                <Input value={calQuery} onChange={(e)=> setCalQuery(e.target.value)} placeholder="Поиск по имени/email" />
+                <div className="mt-1 flex gap-1 flex-wrap max-h-48 overflow-auto">
+                  {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
+                    const sel = calSelected.has(c.id);
+                    return (
+                      <button key={c.id} type="button" title={c.id} className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
+                        const next = new Set(calSelected); if (sel) next.delete(c.id); else next.add(c.id); setCalSelected(next);
+                      }}>{c.summary || c.id}</button>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-gray-500 mt-0.5">Если нет доступа к какому-то календарю — события просто не подтянутся, будет подсказка.</div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="font-medium">Превью (сегодня + 7 дней)</div>
+                <button className="underline" onClick={async ()=>{
+                  try {
+                    setCalLoading(true);
+                    if (calList.length===0) {
+                      const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
+                      if (r.ok) setCalList(await r.json());
+                    }
+                    const ids = Array.from(calSelected).join(',');
+                    const now = new Date();
+                    const timeMin = now.toISOString();
+                    const timeMax = new Date(now.getTime() + 7*24*3600*1000).toISOString();
+                    const ev = await fetch(`/api/calendar/events?calendarId=${encodeURIComponent(ids)}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`, { cache: 'no-store' });
+                    const j = await ev.json();
+                    if (ev.ok) setCalPreview(j.items||[]); else alert(j?.error||'Ошибка');
+                  } finally { setCalLoading(false); }
+                }}>Обновить превью</button>
+              </div>
+              {calLoading ? <div className="text-gray-500">Загрузка…</div> : (
+                <div className="space-y-1 max-h-56 overflow-auto">
+                  {calPreview.length===0 ? <div className="text-gray-500">Нет событий</div> : calPreview.map((e,i)=> (
+                    <div key={i} className="border rounded p-1 bg-white">
+                      <div className="text-[12px] text-gray-600">{new Date(e.start).toLocaleString('ru-RU')}</div>
+                      <div className="text-sm">{e.summary || 'Без названия'}</div>
+                      <div className="text-[12px] text-gray-500">{e.organizer || ''}</div>
+                      {e.hangoutLink ? <a className="text-[12px] text-blue-600 underline" href={e.hangoutLink} target="_blank" rel="noreferrer">Ссылка</a> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
           <label className="block text-sm">Источник
             <div className="flex items-center gap-2 mb-1 text-xs">
               <label className="inline-flex items-center gap-1"><input type="checkbox" checked={showDraftsInWidget} onChange={(e)=>setShowDraftsInWidget(e.target.checked)} /> Показывать черновики</label>
             </div>
+            {wType!=='calendar' ? (
             <select className="border rounded px-3 py-2 text-sm w-full" value={wDataSourceId ?? ''} onChange={async (e) => {
               const id = e.target.value ? Number(e.target.value) : undefined;
               setWDataSourceId(id);
@@ -895,8 +976,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 return (<option key={s.id} value={s.id}>{label}{s.status==='draft'?' — Draft':''}</option>);
               })}
             </select>
+            ) : null}
           </label>
-          {wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 0 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 0) ? (
+          {wType!=='calendar' && wDataSourceId && ((sourceSheets[wDataSourceId]?.length || 0) > 0 || ((links as any[]).find((l:any)=> Number(l.dataSourceId)===Number(wDataSourceId))?.sheets?.length||0) > 0) ? (
             <label className="block text-sm">Лист
               <select className="border rounded px-3 py-2 text-sm w-full" value={wSheetTitle} onChange={(e)=>{
                 const t = e.target.value; setWSheetTitle(t);
@@ -928,7 +1010,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <label className="block text-sm">Диапазон (Range)
             <Input value={wRange} onChange={(e) => setWRange(e.target.value)} placeholder="A1:Z" />
           </label>
-          {wDataSourceId && wSheetTitle ? (
+          {wType!=='calendar' && wDataSourceId && wSheetTitle ? (
             <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="font-medium">Превью данных (5 строк)</div>
@@ -984,7 +1066,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               </div>
             </div>
           ) : null}
-          {wType !== 'table' ? (
+          {wType !== 'table' && wType!=='calendar' ? (
             <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
               <div className="font-medium">Поля графика</div>
               <label className="block">Ось X (категория/дата)
