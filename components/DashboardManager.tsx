@@ -924,7 +924,25 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 const content = (
                   <div className="w-full h-full p-2 bg-white border rounded shadow-sm overflow-auto">
                     <div className="flex items-center justify-between mb-2 drag-handle cursor-move select-none">
-                      <div className="text-sm">{w.title} ({w.type})</div>
+                      <div className="text-sm">
+                        {canEdit ? (
+                          <input
+                            className="border rounded px-1 py-0.5 text-sm mr-2 bg-white cursor-text"
+                            defaultValue={String(w.title || '')}
+                            onClick={(e)=> e.stopPropagation()}
+                            onChange={()=>{}}
+                            onBlur={async (e)=>{
+                              const title = e.currentTarget.value;
+                              if (!title || title===w.title) return;
+                              try {
+                                await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }), credentials: 'include' });
+                              } catch {}
+                            }}
+                          />
+                        ) : (
+                          <span>{w.title}</span>
+                        )} ({w.type})
+                      </div>
                       {canEdit && (w as any).status!=='deleted' ? (
                         <button className="text-red-600 text-xs" onClick={async (e) => {
                           e.stopPropagation();
