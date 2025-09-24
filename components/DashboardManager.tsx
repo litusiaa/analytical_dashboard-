@@ -510,6 +510,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       setOpenAddPipedrive(false);
       setSrcName(''); setPdPipelineId(''); setPdStageIds(''); setPdOwnerIds(''); setPdDateField(''); setPdDateFrom(''); setPdDateTo(''); setPdFields(''); setPdSavedFilterId(''); setPdPreview(null);
       setShowDraftsInWidget(true);
+      setTab('draft');
     } catch (e: any) {
       setErr1(e.message || 'Ошибка');
     } finally {
