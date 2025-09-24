@@ -87,17 +87,26 @@ function toRfc3339Utc(localIso: string): string {
 
 export async function listCalendars(): Promise<any[]> {
   const token = await getAccessToken();
-  const u = new URL('https://www.googleapis.com/calendar/v3/users/me/calendarList');
-  u.searchParams.set('minAccessRole', 'freeBusyReader');
-  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } as any, cache: 'no-store' as any });
-  const j = await res.json().catch(() => ({}));
-  if (res.status === 401 || res.status === 403) {
-    const err = new Error('Нет доступа к календарям. Дайте доступ аккаунту Виолетты или разрешите доменный просмотр.');
-    (err as any).status = 403; throw err;
-  }
-  if (!res.ok) throw new Error('CalendarList error');
-  const items = Array.isArray(j.items) ? j.items : [];
-  return items.filter((x: any) => ['owner','writer','reader','freeBusyReader'].includes(String(x.accessRole||'')));
+  const all: any[] = [];
+  let pageToken: string | undefined = undefined;
+  do {
+    const u = new URL('https://www.googleapis.com/calendar/v3/users/me/calendarList');
+    u.searchParams.set('minAccessRole', 'freeBusyReader');
+    u.searchParams.set('showHidden', 'true');
+    u.searchParams.set('maxResults', '250');
+    if (pageToken) u.searchParams.set('pageToken', pageToken);
+    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } as any, cache: 'no-store' as any });
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) {
+      const err = new Error('Нет доступа к календарям. Дайте доступ аккаунту Виолетты или разрешите доменный просмотр.');
+      (err as any).status = 403; throw err;
+    }
+    if (!res.ok) throw new Error('CalendarList error');
+    const items = Array.isArray(j.items) ? j.items : [];
+    all.push(...items);
+    pageToken = j.nextPageToken || undefined;
+  } while (pageToken);
+  return all.filter((x: any) => ['owner','writer','reader','freeBusyReader'].includes(String(x.accessRole||'')));
 }
 
 export async function listEvents(calendarIds: string[], timeMinLocal: string, timeMaxLocal: string): Promise<{ items: any[]; errors: any[] }> {
@@ -107,30 +116,36 @@ export async function listEvents(calendarIds: string[], timeMinLocal: string, ti
   const ids = (calendarIds && calendarIds.length) ? calendarIds : ['primary'];
   const all: any[] = []; const errors: any[] = [];
   for (const id of ids) {
-    const u = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events`);
-    u.searchParams.set('timeMin', timeMin);
-    u.searchParams.set('timeMax', timeMax);
-    u.searchParams.set('singleEvents', 'true');
-    u.searchParams.set('orderBy', 'startTime');
-    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } as any, cache: 'no-store' as any });
-    const j = await res.json().catch(() => ({}));
-    if (res.status === 403) { errors.push({ calendarId: id, message: 'Нет доступа к календарю' }); continue; }
-    if (!res.ok) { errors.push({ calendarId: id, message: 'Ошибка' }); continue; }
-    const items = Array.isArray(j.items) ? j.items : [];
-    for (const ev of items) {
-      all.push({
-        calendarId: id,
-        owner: j.summary || id,
-        start: ev.start?.dateTime || ev.start?.date,
-        end: ev.end?.dateTime || ev.end?.date,
-        summary: ev.summary || '',
-        organizer: ev.organizer?.email || null,
-        attendees: (ev.attendees||[]).map((a: any)=> a.email),
-        hangoutLink: ev.hangoutLink || null,
-        location: ev.location || null,
-        status: ev.status || 'confirmed',
-      });
-    }
+    let pageTok: string | undefined = undefined;
+    do {
+      const u = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events`);
+      u.searchParams.set('timeMin', timeMin);
+      u.searchParams.set('timeMax', timeMax);
+      u.searchParams.set('singleEvents', 'true');
+      u.searchParams.set('maxResults', '2500');
+      u.searchParams.set('orderBy', 'startTime');
+      if (pageTok) u.searchParams.set('pageToken', pageTok);
+      const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${token}` } as any, cache: 'no-store' as any });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 403) { errors.push({ calendarId: id, message: 'Нет доступа к календарю' }); break; }
+      if (!res.ok) { errors.push({ calendarId: id, message: 'Ошибка' }); break; }
+      const items = Array.isArray(j.items) ? j.items : [];
+      for (const ev of items) {
+        all.push({
+          calendarId: id,
+          owner: j.summary || id,
+          start: ev.start?.dateTime || ev.start?.date,
+          end: ev.end?.dateTime || ev.end?.date,
+          summary: ev.summary || '',
+          organizer: ev.organizer?.email || null,
+          attendees: (ev.attendees||[]).map((a: any)=> a.email),
+          hangoutLink: ev.hangoutLink || null,
+          location: ev.location || null,
+          status: ev.status || 'confirmed',
+        });
+      }
+      pageTok = j.nextPageToken || undefined;
+    } while (pageTok);
   }
   return { items: all, errors };
 }
