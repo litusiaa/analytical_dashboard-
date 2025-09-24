@@ -964,7 +964,28 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     minHeight={160}
                     dragHandleClassName="drag-handle"
                     onDragStart={()=>{ isInteractingRef.current = true; }}
+                    onDrag={(e, d) => {
+                      // live rearrange while dragging
+                      let next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
+                      const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
+                        next = pushDownToResolve(next, visibleWidgets);
+                      }
+                      setLayout(next);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
+                    }}
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
+                    onResize={(e, dir, ref, delta, pos) => {
+                      // live rearrange while resizing
+                      const width = ref.offsetWidth; const height = ref.offsetHeight;
+                      let next = { ...layout, [Number(w.id)]: { ...r, width, height, x: pos.x, y: pos.y } } as any;
+                      const proposal = { x: pos.x, y: pos.y, width, height };
+                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
+                        next = pushDownToResolve(next, visibleWidgets);
+                      }
+                      setLayout(next);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
+                    }}
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
                       const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
