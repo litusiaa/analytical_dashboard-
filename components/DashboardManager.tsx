@@ -313,6 +313,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [calMode, setCalMode] = useState<'day'|'week'|'month'>('day');
   const [calPreview, setCalPreview] = useState<any[]>([]);
   const [calLoading, setCalLoading] = useState(false);
+  const [calError, setCalError] = useState<string>('');
 
   useEffect(() => {
     if (!openAddCalendar && !openAddWidget) return;
@@ -320,7 +321,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       try {
         if (calList.length === 0) {
           const r = await fetch('/api/calendar/calendars', { cache: 'no-store' });
-          if (r.ok) setCalList(await r.json());
+          const j = await r.json();
+          if (r.ok) { setCalList(j || []); setCalError(''); } else { setCalError(j?.error || 'Не удалось получить календари'); }
         }
       } catch {}
     })();
@@ -891,15 +893,21 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
             <div>
               <div className="mb-1">Люди (календарь)</div>
               <Input value={calQuery} onChange={(e)=> setCalQuery(e.target.value)} placeholder="Поиск по имени/email" />
-              <div className="mt-1 flex gap-1 flex-wrap max-h-48 overflow-auto">
-                {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
-                  const sel = calSelected.has(c.id);
-                  return (
-                    <button key={c.id} type="button" title={c.id} className={`px-2 py-0.5 rounded border text-xs ${sel?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 border-gray-300'}`} onClick={()=>{
-                      const next = new Set(calSelected); if (sel) next.delete(c.id); else next.add(c.id); setCalSelected(next);
-                    }}>{c.summary || c.id}</button>
-                  );
-                })}
+              {calError ? <div className="text-[12px] text-red-700 mt-1">{calError}</div> : null}
+              <div className="mt-1 max-h-48 overflow-auto border rounded">
+                <ul className="text-sm">
+                  {calList.filter(c=> (c.summary||c.id).toLowerCase().includes(calQuery.toLowerCase())).map(c=> {
+                    const sel = calSelected.has(c.id);
+                    return (
+                      <li key={c.id} className={`px-2 py-1 flex items-center justify-between cursor-pointer ${sel?'bg-blue-50':'bg-white'}`} onClick={()=>{
+                        const next = new Set(calSelected); if (sel) next.delete(c.id); else next.add(c.id); setCalSelected(next);
+                      }}>
+                        <span className="truncate" title={c.id}>{c.summary || c.id}</span>
+                        <span className={`text-[11px] ml-2 ${sel?'text-blue-700':'text-gray-400'}`}>{sel?'выбрано':'выбрать'}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             </div>
             <div className="flex items-center justify-between">
