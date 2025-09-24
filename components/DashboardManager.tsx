@@ -237,11 +237,11 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
   const [sourceSheets, setSourceSheets] = useState<Record<number, { title: string; range?: string }[]>>({});
 
   // Modals
-  const [openAddSource, setOpenAddSource] = useState(false);
+  const [openAddSheets, setOpenAddSheets] = useState(false);
+  const [openAddPipedrive, setOpenAddPipedrive] = useState(false);
   const [openAddWidget, setOpenAddWidget] = useState(false);
 
   // Add Source form
-  const [srcType, setSrcType] = useState<'sheets'|'pipedrive'>('sheets');
   const [srcName, setSrcName] = useState('');
   const [srcUrl, setSrcUrl] = useState('');
   const [sheets, setSheets] = useState<SheetMeta[]>([]);
@@ -418,25 +418,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     setLoading1(true);
     setErr1(null);
     try {
-      const isSheets = srcType==='sheets';
-      const payload: any = isSheets ? {
+      const payload: any = {
         name: srcName || undefined,
         spreadsheetUrl: srcUrl,
         sheets: Object.entries(selected).map(([title, range]) => ({ title, range })),
-      } : {
-        type: 'pipedrive',
-        name: srcName || undefined,
-        entity: pdEntity,
-        config: {
-          pipelineId: pdPipelineId ? Number(pdPipelineId) : undefined,
-          stageIds: pdStageIds ? pdStageIds.split(',').map(s=> Number(s.trim())).filter(n=>!Number.isNaN(n)) : undefined,
-          ownerIds: pdOwnerIds ? pdOwnerIds.split(',').map(s=> Number(s.trim())).filter(n=>!Number.isNaN(n)) : undefined,
-          dateField: pdDateField || undefined,
-          dateFrom: pdDateFrom || undefined,
-          dateTo: pdDateTo || undefined,
-          fields: pdFields ? pdFields.split(',').map(s=> s.trim()) : undefined,
-          savedFilterId: pdSavedFilterId ? Number(pdSavedFilterId) : undefined,
-        }
       };
       const res2 = await fetch(`/api/dashboards/${slug}/data-sources`, {
         method: 'POST',
@@ -452,7 +437,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
       }
       const created = await res2.json();
       // Оптимистично добавим линк
-      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || (isSheets?'Google Sheet':'Pipedrive'), type: isSheets ? 'google_sheets' : 'pipedrive', status: 'draft' } }, ...prev]);
+      setLinks((prev) => [{ id: created.id, dataSource: { id: created.dataSourceId, name: srcName || 'Google Sheet', type: 'google_sheets', status: 'draft' } }, ...prev]);
       // Пробуем перезапросить список; если неуспех — оставляем оптимистичный
       try {
         const resL = await fetch(`/api/dashboards/${slug}/data-sources?ts=${Date.now()}`, { cache: 'no-store' });
@@ -467,7 +452,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           setWidgets(dataW.items || []);
         }
       } catch {}
-      setOpenAddSource(false);
+      setOpenAddSheets(false);
       setSrcName(''); setSrcUrl(''); setSheets([]); setSelected({}); setPdPreview(null);
       // Make newly added draft immediately available in widget modal without reload
       setShowDraftsInWidget(true);
@@ -518,7 +503,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     <>
       {canEdit ? (
         <div className="flex gap-2">
-          <Button onClick={() => setOpenAddSource(true)}>Добавить источник</Button>
+          <Button onClick={() => setOpenAddSheets(true)}>Добавить таблицу (Google Sheets)</Button>
+          <Button onClick={() => setOpenAddPipedrive(true)} variant="secondary">Добавить источник Pipedrive</Button>
           <Button variant="secondary" onClick={() => setOpenAddWidget(true)}>Добавить виджет</Button>
         </div>
       ) : null}
@@ -687,33 +673,22 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           </ul>
         )}
       </div>
-      <Modal open={canEdit && openAddSource} onClose={() => setOpenAddSource(false)} title="Добавить источник">
+      <Modal open={canEdit && openAddSheets} onClose={() => setOpenAddSheets(false)} title="Добавить таблицу (Google Sheets)">
         <div className="space-y-3">
-          <div className="text-sm">Тип источника
-            <div className="mt-1 flex items-center gap-4 text-sm">
-              <label className="inline-flex items-center gap-1"><input type="radio" checked={srcType==='sheets'} onChange={()=>setSrcType('sheets')} /> Google Sheets</label>
-              <label className="inline-flex items-center gap-1"><input type="radio" checked={srcType==='pipedrive'} onChange={()=>setSrcType('pipedrive')} /> Pipedrive</label>
-            </div>
-          </div>
+          
           {/* success toast placeholder (removed undefined component) */}
           <label className="block text-sm">Name
             <Input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="DS Main Sheet" />
           </label>
-          {srcType==='sheets' ? (
-            <label className="block text-sm">Spreadsheet URL
-              <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') fetchMetadata(srcUrl); }} onBlur={(e) => fetchMetadata(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
-            </label>
-          ) : null}
-          {srcType==='sheets' ? (
-            <>
-              {checking === 'loading' ? <div className="text-xs text-gray-600 flex items-center gap-2"><Spinner /> Проверяем доступ…</div> : null}
-              {checking === 'ok' ? <div className="text-xs text-green-700">Доступ есть, найдено {sheets.length} листов</div> : null}
-              {checking === 'noaccess' ? <div className="text-xs text-red-700">Нет доступа</div> : null}
-              {checking === 'invalid' ? <div className="text-xs text-red-700">Неверная ссылка Google Sheets</div> : null}
-              {checking === 'nodata' ? <div className="text-xs text-yellow-700">Листы не найдены. Проверьте доступ и содержимое файла.</div> : null}
-            </>
-          ) : null}
-          {srcType==='sheets' && sheets.length > 0 ? (
+          <label className="block text-sm">Spreadsheet URL
+            <Input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') fetchMetadata(srcUrl); }} onBlur={(e) => fetchMetadata(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+          </label>
+          {checking === 'loading' ? <div className="text-xs text-gray-600 flex items-center gap-2"><Spinner /> Проверяем доступ…</div> : null}
+          {checking === 'ok' ? <div className="text-xs text-green-700">Доступ есть, найдено {sheets.length} листов</div> : null}
+          {checking === 'noaccess' ? <div className="text-xs text-red-700">Нет доступа</div> : null}
+          {checking === 'invalid' ? <div className="text-xs text-red-700">Неверная ссылка Google Sheets</div> : null}
+          {checking === 'nodata' ? <div className="text-xs text-yellow-700">Листы не найдены. Проверьте доступ и содержимое файла.</div> : null}
+          {sheets.length > 0 ? (
             <div className="border rounded p-2">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-medium">Листы</div>
@@ -748,82 +723,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               </div>
             </div>
           ) : null}
-          {srcType==='pipedrive' ? (
-            <div className="border rounded p-2 text-xs bg-gray-50 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block text-sm col-span-2">Сущность
-                  <select className="border rounded px-2 py-1 w-full" value={pdEntity} onChange={(e)=> setPdEntity(e.target.value as any)}>
-                    <option value="deals">Сделки</option>
-                    <option value="persons">Контакты</option>
-                    <option value="organizations">Организации</option>
-                    <option value="activities">Активности</option>
-                  </select>
-                </label>
-                <label className="block text-sm">Воронка (pipelineId)
-                  <Input value={pdPipelineId} onChange={(e)=> setPdPipelineId(e.target.value)} placeholder="1" />
-                </label>
-                <label className="block text-sm">Этапы (stageIds, через запятую)
-                  <Input value={pdStageIds} onChange={(e)=> setPdStageIds(e.target.value)} placeholder="1,2,3" />
-                </label>
-                <label className="block text-sm">Владельцы (ownerIds, через запятую)
-                  <Input value={pdOwnerIds} onChange={(e)=> setPdOwnerIds(e.target.value)} placeholder="123,456" />
-                </label>
-                <label className="block text-sm">Поле даты
-                  <Input value={pdDateField} onChange={(e)=> setPdDateField(e.target.value)} placeholder="update_time" />
-                </label>
-                <label className="block text-sm">Дата от
-                  <Input value={pdDateFrom} onChange={(e)=> setPdDateFrom(e.target.value)} placeholder="2025-09-01" />
-                </label>
-                <label className="block text-sm">Дата до
-                  <Input value={pdDateTo} onChange={(e)=> setPdDateTo(e.target.value)} placeholder="2025-09-30" />
-                </label>
-                <label className="block text-sm col-span-2">Поля (через запятую)
-                  <Input value={pdFields} onChange={(e)=> setPdFields(e.target.value)} placeholder="title,value,currency,custom.*" />
-                </label>
-                <label className="block text-sm">Saved Filter ID (опц.)
-                  <Input value={pdSavedFilterId} onChange={(e)=> setPdSavedFilterId(e.target.value)} placeholder="null" />
-                </label>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-sm">Предпросмотр (5 строк)</div>
-                <button className="underline" onClick={async ()=>{
-                  try {
-                    const qs = new URLSearchParams({ entity: pdEntity, limit: '5' });
-                    if (pdPipelineId) qs.set('pipelineId', pdPipelineId);
-                    if (pdStageIds) qs.set('stageIds', pdStageIds);
-                    if (pdOwnerIds) qs.set('ownerIds', pdOwnerIds);
-                    if (pdDateField) qs.set('dateField', pdDateField);
-                    if (pdDateFrom) qs.set('dateFrom', pdDateFrom);
-                    if (pdDateTo) qs.set('dateTo', pdDateTo);
-                    if (pdFields) qs.set('fields', JSON.stringify(pdFields.split(',').map(s=> s.trim())));
-                    if (pdSavedFilterId) qs.set('savedFilterId', pdSavedFilterId);
-                    const r = await fetch(`/api/pipedrive/preview?${qs.toString()}`, { cache: 'no-store' });
-                    const j = await r.json();
-                    if (!r.ok) throw new Error(j?.error||'Ошибка превью');
-                    setPdPreview(j);
-                  } catch (e:any) { alert(e.message||'Ошибка превью'); }
-                }}>Обновить превью</button>
-              </div>
-              {pdPreview ? (
-                <div className="overflow-auto">
-                  <table className="min-w-full text-xs table-fixed border-separate border-spacing-0">
-                    <thead className="bg-white sticky top-0 z-10">
-                      <tr>
-                        {pdPreview.columns.map((c)=> (<th key={c.key} className="px-2 py-1 text-left border border-gray-200">{c.key}{c.type?` (${c.type})`:''}</th>))}
-                      </tr>
-                    </thead>
-                    <tbody className="[&>tr:nth-child(odd)]:bg-gray-50">
-                      {(pdPreview.sample||[]).map((row:any, i:number)=> (
-                        <tr key={i} className="hover:bg-gray-100">
-                          {pdPreview.columns.map((c)=> (<td key={c.key} className="px-2 py-1 border border-gray-200 align-top break-words">{String(row?.[c.key] ?? '—')}</td>))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <div className="text-gray-500">Нажмите «Обновить превью», чтобы увидеть колонки</div>}
-            </div>
-          ) : null}
+          
           {err1 ? (
             <div className="text-sm text-red-600">
               {err1}
@@ -834,7 +734,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
               ) : null}
             </div>
           ) : null}
-          {srcType==='sheets' ? (
+          {
             <div className="border rounded p-2 text-xs text-gray-600">
               <div className="font-medium text-gray-500 mb-1">Доступ сервисному аккаунту</div>
               <div>Чтобы приложение могло читать таблицу, добавьте этого пользователя в Google Sheets с правами «Редактор»:</div>
@@ -844,10 +744,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                 <button className="text-blue-600 underline" onClick={() => alert('1) В таблице нажмите «Поделиться»\n2) Вставьте адрес сервисного аккаунта\n3) Выберите «Редактор» → «Готово»')}>Как дать доступ?</button>
               </div>
             </div>
-          ) : null}
+          }
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setOpenAddSource(false)}>Отмена</Button>
-        <Button onClick={handleAddSource} disabled={loading1 || (srcType==='sheets' ? (!srcUrl || Object.keys(selected).length === 0) : false)}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохраняем…</span></>) : 'Сохранить'}</Button>
+            <Button variant="secondary" onClick={() => setOpenAddSheets(false)}>Отмена</Button>
+            <Button onClick={handleAddSource} disabled={loading1 || (!srcUrl || Object.keys(selected).length === 0)}>{loading1 ? (<><Spinner /> <span className="ml-2">Сохраняем…</span></>) : 'Сохранить'}</Button>
           </div>
           <div className="text-xs text-gray-500">Дайте доступ редактора сервисному аккаунту: переменная GOOGLE_SHEETS_CLIENT_EMAIL</div>
         </div>
