@@ -486,11 +486,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         const next: any = {};
         for (const w of data.widgets || []) next[Number(w.widgetId)] = { x: w.x, y: w.y, width: w.width, height: w.height, zIndex: w.zIndex ?? 0 };
         // In view-mode (canEdit=false), ensure no overlaps by applying greedy separation
-        const safe = canEdit ? next : pushDownToResolve({ ...next }, visibleWidgets as any);
-        setLayout(safe);
+        setLayout(next);
         setLayoutLoaded(true);
         if (typeof window !== 'undefined') {
-          (window as any).__currentLayout = safe;
+          (window as any).__currentLayout = next;
           (window as any).__currentSlug = slug;
         }
       } catch { setLayoutLoaded(true); }
@@ -517,10 +516,22 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   // Ensure non-overlap in view-mode at render time as well (in case of legacy layouts)
   const renderLayout = useMemo(() => {
+    // For view-mode: display exactly published layout if available; fallback to safe separation only if overlapping is detected
     if (canEdit) return layout;
     try {
       const copy: any = { ...layout };
-      return pushDownToResolve(copy, visibleWidgets as any);
+      // detect any overlap first
+      const ids = visibleWidgets.map((w:any)=> Number(w.id));
+      let hasOverlap = false;
+      for (let i=0;i<ids.length;i++) {
+        const a = copy[ids[i]] || defaultRect(i);
+        for (let j=i+1;j<ids.length;j++) {
+          const b = copy[ids[j]] || defaultRect(j);
+          if (intersects(a,b)) { hasOverlap = true; break; }
+        }
+        if (hasOverlap) break;
+      }
+      return hasOverlap ? pushDownToResolve(copy, visibleWidgets as any) : layout;
     } catch { return layout; }
   }, [layout, canEdit, visibleWidgets]);
 
