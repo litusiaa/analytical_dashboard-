@@ -485,10 +485,12 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
         if (aborted) return;
         const next: any = {};
         for (const w of data.widgets || []) next[Number(w.widgetId)] = { x: w.x, y: w.y, width: w.width, height: w.height, zIndex: w.zIndex ?? 0 };
-        setLayout(next);
+        // In view-mode (canEdit=false), ensure no overlaps by applying greedy separation
+        const safe = canEdit ? next : pushDownToResolve({ ...next }, visibleWidgets as any);
+        setLayout(safe);
         setLayoutLoaded(true);
         if (typeof window !== 'undefined') {
-          (window as any).__currentLayout = next;
+          (window as any).__currentLayout = safe;
           (window as any).__currentSlug = slug;
         }
       } catch { setLayoutLoaded(true); }
