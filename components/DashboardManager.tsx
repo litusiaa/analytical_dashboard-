@@ -515,6 +515,15 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     };
   }, [slug, canEdit]);
 
+  // Ensure non-overlap in view-mode at render time as well (in case of legacy layouts)
+  const renderLayout = useMemo(() => {
+    if (canEdit) return layout;
+    try {
+      const copy: any = { ...layout };
+      return pushDownToResolve(copy, visibleWidgets as any);
+    } catch { return layout; }
+  }, [layout, canEdit, visibleWidgets]);
+
   function defaultRect(index: number): { x: number; y: number; width: number; height: number; zIndex: number } {
     const col = index % 2; const row = Math.floor(index / 2);
     const width = 560; const height = 320; const gap = 16;
@@ -943,7 +952,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
           <div className="relative border rounded" style={{ height: Math.max(containerHeight, 1200) }}>
             {visibleWidgets
               .map((w, idx) => {
-                const r = layout[Number(w.id)] || defaultRect(idx);
+                const base = layout[Number(w.id)] || defaultRect(idx);
+                const r = canEdit ? base : (renderLayout[Number(w.id)] || base);
                 const content = (
                   <div className="w-full h-full p-2 bg-white border rounded shadow-sm overflow-auto">
                     <div className="flex items-center justify-between mb-2 drag-handle cursor-move select-none">
