@@ -537,6 +537,27 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
 
   const GAP = 16;
 
+  function adjustActiveAvoidingOverlap(proposal: { x:number;y:number;width:number;height:number }, selfId: number, visible: WidgetItem[], currentLayout: Record<number, { x:number;y:number;width:number;height:number;zIndex:number }>) {
+    // Push the active rect down until it does not intersect with any other visible rect
+    let rect = { ...proposal };
+    let changed = true;
+    let guard = 0;
+    while (changed && guard < 50) {
+      changed = false; guard++;
+      for (let i = 0; i < visible.length; i++) {
+        const wid = Number((visible[i] as any).id);
+        if (wid === selfId) continue;
+        const other = currentLayout[wid] || defaultRect(i);
+        if (intersects(rect, other)) {
+          const newY = other.y + other.height + GAP;
+          if (newY > rect.y) { rect.y = newY; changed = true; }
+        }
+      }
+    }
+    if (rect.x < 0) rect.x = 0; if (rect.y < 0) rect.y = 0;
+    return rect;
+  }
+
   function pushDownToResolve(nextLayout: Record<number, { x:number;y:number;width:number;height:number;zIndex:number }>, visible: WidgetItem[]) {
     // Greedy vertical separation: sort by y, then ensure no intersections by pushing down
     const order = visible.map((w:any, idx:number) => ({ id: Number(w.id), rect: nextLayout[Number(w.id)] || defaultRect(idx) }));
@@ -965,45 +986,48 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     dragHandleClassName="drag-handle"
                     onDragStart={()=>{ isInteractingRef.current = true; }}
                     onDrag={(e, d) => {
-                      // live rearrange while dragging
-                      let next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
-                      const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
-                        next = pushDownToResolve(next, visibleWidgets);
-                      }
+                      // live rearrange while dragging, without overlaps
+                      let next = { ...layout } as any;
+                      const proposal = { x: Math.max(0, d.x), y: Math.max(0, d.y), width: r.width, height: r.height };
+                      const adjusted = willCollide(proposal, Number((w as any).id), visibleWidgets, next)
+                        ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
+                        : proposal;
+                      next[Number(w.id)] = { ...r, x: adjusted.x, y: adjusted.y };
                       setLayout(next);
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                     }}
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
                     onResize={(e, dir, ref, delta, pos) => {
-                      // live rearrange while resizing
+                      // live rearrange while resizing, without overlaps
                       const width = ref.offsetWidth; const height = ref.offsetHeight;
-                      let next = { ...layout, [Number(w.id)]: { ...r, width, height, x: pos.x, y: pos.y } } as any;
-                      const proposal = { x: pos.x, y: pos.y, width, height };
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
-                        next = pushDownToResolve(next, visibleWidgets);
-                      }
+                      let next = { ...layout } as any;
+                      const proposal = { x: Math.max(0, pos.x), y: Math.max(0, pos.y), width, height };
+                      const adjusted = willCollide(proposal, Number((w as any).id), visibleWidgets, next)
+                        ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
+                        : proposal;
+                      next[Number(w.id)] = { ...r, width: adjusted.width, height: adjusted.height, x: adjusted.x, y: adjusted.y };
                       setLayout(next);
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                     }}
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
-                      const proposal = { x: d.x, y: d.y, width: r.width, height: r.height };
-                      let next = { ...layout, [Number(w.id)]: { ...r, x: d.x, y: d.y } } as any;
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
-                        // вместо отката — раздвигаем ниже стоящие
-                        next = pushDownToResolve(next, visibleWidgets);
-                      }
+                      const proposal = { x: Math.max(0, d.x), y: Math.max(0, d.y), width: r.width, height: r.height };
+                      let next = { ...layout } as any;
+                      const adjusted = willCollide(proposal, Number((w as any).id), visibleWidgets, next)
+                        ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
+                        : proposal;
+                      next[Number(w.id)] = { ...r, x: adjusted.x, y: adjusted.y } as any;
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}
                     onResizeStop={(e, dir, ref, delta, pos) => {
                       isInteractingRef.current = false;
-                      const proposal = { x: pos.x, y: pos.y, width: ref.offsetWidth, height: ref.offsetHeight };
-                      let next = { ...layout, [Number(w.id)]: { ...r, width: ref.offsetWidth, height: ref.offsetHeight, x: pos.x, y: pos.y } } as any;
-                      if (willCollide(proposal, Number((w as any).id), visibleWidgets, next)) {
-                        next = pushDownToResolve(next, visibleWidgets);
-                      }
+                      const proposal = { x: Math.max(0, pos.x), y: Math.max(0, pos.y), width: ref.offsetWidth, height: ref.offsetHeight };
+                      let next = { ...layout } as any;
+                      const adjusted = willCollide(proposal, Number((w as any).id), visibleWidgets, next)
+                        ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
+                        : proposal;
+                      next[Number(w.id)] = { ...r, width: adjusted.width, height: adjusted.height, x: adjusted.x, y: adjusted.y } as any;
                       try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
                       saveLayoutDebounced(next);
                     }}>
