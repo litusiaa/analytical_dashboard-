@@ -45,7 +45,25 @@ export function EditBanner() {
           } catch {}
           await fetch(location.pathname.replace(/\/$/, '') + '/draft', { method: 'POST', credentials: 'include' }); location.reload();
         }}>Сохранить как черновик</button>
-        <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/publish', { method: 'POST', credentials: 'include' }); location.reload(); }}>Опубликовать</button>
+        <button className="underline" onClick={async () => {
+          try {
+            // Flush current draft layout before publishing (bypass debounce)
+            const payload = (() => {
+              try {
+                const w: any = (window as any);
+                if (w && w.__currentLayout && w.__currentSlug) {
+                  return { slug: String(w.__currentSlug), widgets: Object.entries(w.__currentLayout).map(([id, r]: any)=> ({ id: Number(id), ...r })) };
+                }
+              } catch {}
+              return null;
+            })();
+            if (payload && payload.slug) {
+              await fetch(`/api/dashboards/${payload.slug}/layout/draft`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgets: payload.widgets }), credentials: 'include' });
+            }
+          } catch {}
+          await fetch(location.pathname.replace(/\/$/, '') + '/publish', { method: 'POST', credentials: 'include' });
+          location.reload();
+        }}>Опубликовать</button>
         <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/discard', { method: 'POST', credentials: 'include' }); location.reload(); }}>Отменить изменения</button>
         <button className="underline" onClick={extend}>Продлить</button>
         <button className="underline" onClick={exit}>Выйти</button>
