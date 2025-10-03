@@ -970,13 +970,23 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                     <div className="flex items-center justify-between mb-2 drag-handle cursor-move select-none">
                       <div className="text-sm">{w.title} ({w.type})</div>
                       {canEdit && (w as any).status!=='deleted' ? (
-                        <button className="text-red-600 text-xs" onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!confirm('Переместить виджет в корзину?')) return;
-                          await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
-                          setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
-                          await refresh();
-                        }}>Удалить</button>
+                        <div className="flex items-center gap-2">
+                          {(w as any).status==='draft' ? (
+                            <button className="text-xs text-green-700" onClick={async (e)=>{
+                              e.stopPropagation();
+                              await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish' }), credentials: 'include' });
+                              setWidgets((prev)=> prev.map((x:any)=> x.id===w.id ? { ...x, status: 'published' } : x));
+                              await refresh();
+                            }}>Опубликовать</button>
+                          ) : null}
+                          <button className="text-red-600 text-xs" onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!confirm('Переместить виджет в корзину?')) return;
+                            await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'DELETE', credentials: 'include' });
+                            setWidgets((prev) => prev.map((x: any) => x.id === w.id ? { ...x, status: 'deleted' } : x));
+                            await refresh();
+                          }}>Удалить</button>
+                        </div>
                       ) : null}
                     </div>
                     {w.type === 'table' ? (
