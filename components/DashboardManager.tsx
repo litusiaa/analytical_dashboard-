@@ -1028,8 +1028,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
                         : proposal;
                       next[Number(w.id)] = { ...r, x: adjusted.x, y: adjusted.y };
-                      setLayout(next);
-                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
+                      // Apply a global resolve to push any chain-overlaps down
+                      const resolved = pushDownToResolve({ ...next }, visibleWidgets as any);
+                      setLayout(resolved);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = resolved; } catch {}
                     }}
                     onResizeStart={()=>{ isInteractingRef.current = true; }}
                     onResize={(e, dir, ref, delta, pos) => {
@@ -1041,8 +1043,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
                         : proposal;
                       next[Number(w.id)] = { ...r, width: adjusted.width, height: adjusted.height, x: adjusted.x, y: adjusted.y };
-                      setLayout(next);
-                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
+                      const resolved = pushDownToResolve({ ...next }, visibleWidgets as any);
+                      setLayout(resolved);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = resolved; } catch {}
                     }}
                     onDragStop={(e, d) => {
                       isInteractingRef.current = false;
@@ -1052,8 +1055,9 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                         ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
                         : proposal;
                       next[Number(w.id)] = { ...r, x: adjusted.x, y: adjusted.y } as any;
-                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
-                      saveLayoutDebounced(next);
+                      const resolved = pushDownToResolve({ ...next }, visibleWidgets as any);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = resolved; } catch {}
+                      saveLayoutDebounced(resolved);
                     }}
                     onResizeStop={(e, dir, ref, delta, pos) => {
                       isInteractingRef.current = false;
@@ -1062,9 +1066,10 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                       const adjusted = willCollide(proposal, Number((w as any).id), visibleWidgets, next)
                         ? adjustActiveAvoidingOverlap(proposal, Number((w as any).id), visibleWidgets, next)
                         : proposal;
-                      next[Number(w.id)] = { ...r, width: adjusted.width, height: adjusted.height, x: adjusted.x, y: adjusted.y } as any;
-                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = next; } catch {}
-                      saveLayoutDebounced(next);
+                      next[Number(w.id)] = { ...r, width: Math.round(adjusted.width), height: Math.round(adjusted.height), x: Math.round(adjusted.x), y: Math.round(adjusted.y) } as any;
+                      const resolved = pushDownToResolve({ ...next }, visibleWidgets as any);
+                      try { if (typeof window !== 'undefined') (window as any).__currentLayout = resolved; } catch {}
+                      saveLayoutDebounced(resolved);
                     }}>
                     {content}
                   </Rnd>

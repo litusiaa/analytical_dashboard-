@@ -59,9 +59,10 @@ export function EditBanner() {
             })();
             if (payload && payload.slug) {
               await fetch(`/api/dashboards/${payload.slug}/layout/draft`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ widgets: payload.widgets }), credentials: 'include' });
+              // Copy draft -> published explicitly for layout parity
+              await fetch(`/api/dashboards/${payload.slug}/layout/publish`, { method: 'POST', credentials: 'include' });
             }
           } catch {}
-          await fetch(location.pathname.replace(/\/$/, '') + '/publish', { method: 'POST', credentials: 'include' });
           location.reload();
         }}>Опубликовать</button>
         <button className="underline" onClick={async () => { await fetch(location.pathname.replace(/\/$/, '') + '/discard', { method: 'POST', credentials: 'include' }); location.reload(); }}>Отменить изменения</button>
