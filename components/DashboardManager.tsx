@@ -498,7 +498,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     loadLayout();
     const int = setInterval(() => { if (!isInteractingRef.current) loadLayout(); }, canEdit ? 4000 : 10000);
     return () => { aborted = true; clearInterval(int); };
-  }, [slug, canEdit]);
+  }, [slug, canEdit, tab]);
 
   // Debounced save of draft layout
   const saveLayoutDebounced = useMemo(() => {
