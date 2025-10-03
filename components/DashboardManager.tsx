@@ -976,6 +976,7 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
                               e.stopPropagation();
                               await fetch(`/api/dashboards/${slug}/widgets/${w.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish' }), credentials: 'include' });
                               setWidgets((prev)=> prev.map((x:any)=> x.id===w.id ? { ...x, status: 'published' } : x));
+                              setTab('pub');
                               await refresh();
                             }}>Опубликовать</button>
                           ) : null}
