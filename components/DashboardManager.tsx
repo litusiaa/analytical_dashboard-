@@ -480,7 +480,8 @@ export function DashboardManager({ slug, initialLinks, initialWidgets, serviceEm
     let aborted = false;
     async function loadLayout() {
       try {
-        const res = await fetch(`/api/dashboards/${slug}/layout`, { cache: 'no-store' });
+        const kind = canEdit ? (tab==='draft' ? 'draft' : 'published') : 'published';
+        const res = await fetch(`/api/dashboards/${slug}/layout?kind=${kind}`, { cache: 'no-store' });
         const data = await res.json();
         if (aborted) return;
         const next: any = {};

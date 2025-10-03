@@ -9,6 +9,13 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   if (!SLUGS.has(slug)) return NextResponse.json({ message: 'Unknown dashboard' }, { status: 400, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   const cookie = req.headers.get('cookie') || '';
   const canEdit = /(?:^|;\s*)edit_mode=1(?:;|$)/.test(cookie);
+  const url = new URL(req.url);
+  const kindOverride = url.searchParams.get('kind'); // 'draft' | 'published' | null
+  const wantKind = (() => {
+    if (kindOverride === 'published') return 'published';
+    if (kindOverride === 'draft') return canEdit ? 'draft' : 'published';
+    return canEdit ? 'draft' : 'published';
+  })();
   const widgets = await prisma.widget.findMany({
     where: {
       dashboard: slug,
@@ -23,10 +30,10 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   if (widgetIds.length === 0) {
     return NextResponse.json({ widgets: [], updatedAt: null }, { headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' } });
   }
-  const kind = canEdit ? 'draft' : 'published';
-  const layouts = await prisma.widgetLayout.findMany({ where: { widgetId: { in: widgetIds as any }, kind: canEdit ? 'draft' : 'published' } });
+  const kind = wantKind as any;
+  const layouts = await prisma.widgetLayout.findMany({ where: { widgetId: { in: widgetIds as any }, kind } });
   // Fallback to published if draft missing for some widgets
-  const publishedFallback = canEdit ? await prisma.widgetLayout.findMany({ where: { widgetId: { in: widgetIds as any }, kind: 'published' } }) : [];
+  const publishedFallback = kind === 'draft' ? await prisma.widgetLayout.findMany({ where: { widgetId: { in: widgetIds as any }, kind: 'published' } }) : [];
   const byWidget: Record<string, any> = {};
   for (const l of publishedFallback) byWidget[String(l.widgetId)] = l;
   for (const l of layouts) byWidget[String(l.widgetId)] = l;
